@@ -38,6 +38,7 @@ class Settings {
 
       // Price tracking
       finnhubApiKey: document.getElementById('finnhubApiKey'),
+      alphaVantageApiKey: document.getElementById('alphaVantageApiKey'),
 
       // Journal settings
       wizardEnabledToggle: document.getElementById('wizardEnabledToggle'),
@@ -158,11 +159,48 @@ class Settings {
 
     // Finnhub API Key
     if (this.elements.finnhubApiKey) {
-      this.elements.finnhubApiKey.addEventListener('blur', (e) => {
-        const apiKey = e.target.value.trim();
+      const saveApiKey = (apiKey) => {
         priceTracker.setApiKey(apiKey);
         if (apiKey) {
-          showToast('✅ API key saved - prices will auto-refresh on Positions page', 'success');
+          showToast('✅ Finnhub API key saved - prices will auto-refresh on Positions page', 'success');
+        }
+      };
+
+      this.elements.finnhubApiKey.addEventListener('blur', (e) => {
+        const apiKey = e.target.value.trim();
+        saveApiKey(apiKey);
+      });
+
+      this.elements.finnhubApiKey.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const apiKey = e.target.value.trim();
+          saveApiKey(apiKey);
+          e.target.blur();
+        }
+      });
+    }
+
+    // Alpha Vantage API Key
+    if (this.elements.alphaVantageApiKey) {
+      const saveAlphaVantageKey = (apiKey) => {
+        localStorage.setItem('alphaVantageApiKey', apiKey);
+        if (apiKey) {
+          showToast('✅ Alpha Vantage API key saved - historical charts now available', 'success');
+        }
+      };
+
+      this.elements.alphaVantageApiKey.addEventListener('blur', (e) => {
+        const apiKey = e.target.value.trim();
+        saveAlphaVantageKey(apiKey);
+      });
+
+      this.elements.alphaVantageApiKey.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const apiKey = e.target.value.trim();
+          saveAlphaVantageKey(apiKey);
+          e.target.blur();
         }
       });
     }
@@ -322,10 +360,15 @@ class Settings {
     // Sync preset button active states to match loaded settings
     this.syncPresetButtons();
 
-    // Load API key
-    const apiKey = localStorage.getItem('finnhubApiKey') || '';
+    // Load API keys
+    const finnhubKey = localStorage.getItem('finnhubApiKey') || '';
     if (this.elements.finnhubApiKey) {
-      this.elements.finnhubApiKey.value = apiKey;
+      this.elements.finnhubApiKey.value = finnhubKey;
+    }
+
+    const alphaVantageKey = localStorage.getItem('alphaVantageApiKey') || '';
+    if (this.elements.alphaVantageApiKey) {
+      this.elements.alphaVantageApiKey.value = alphaVantageKey;
     }
 
     // Update header

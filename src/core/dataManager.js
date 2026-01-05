@@ -28,7 +28,8 @@ export const dataManager = {
       journal: state.journal.entries,
       account: {
         realizedPnL: state.account.realizedPnL
-      }
+      },
+      apiKey: localStorage.getItem('finnhubApiKey') || ''
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -75,6 +76,11 @@ export const dataManager = {
           // Restore account P&L
           if (data.account) {
             state.state.account.realizedPnL = data.account.realizedPnL || 0;
+          }
+
+          // Restore API key
+          if (data.apiKey) {
+            localStorage.setItem('finnhubApiKey', data.apiKey);
           }
 
           // Recalculate current account size

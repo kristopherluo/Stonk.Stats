@@ -11,7 +11,12 @@ import { dataManager } from '../../core/dataManager.js';
 class JournalView {
   constructor() {
     this.elements = {};
-    this.currentFilter = 'all';
+    this.filters = {
+      status: 'all',
+      types: [], // Array of selected type strings
+      dateFrom: null,
+      dateTo: null
+    };
     this.sortColumn = 'date';
     this.sortDirection = 'desc';
     this.expandedRows = new Set();
@@ -20,6 +25,11 @@ class JournalView {
   init() {
     this.cacheElements();
     this.bindEvents();
+
+    // Initialize date inputs with gray styling since "All time" is default
+    if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
+    if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
+
     this.render();
 
     // Listen for journal changes
@@ -29,6 +39,11 @@ class JournalView {
 
     // Listen for view changes
     state.on('viewChanged', (data) => {
+      // Clear expanded rows when navigating away from journal
+      if (data.from === 'journal') {
+        this.expandedRows.clear();
+      }
+
       if (data.to === 'journal') this.render();
     });
   }
@@ -58,8 +73,20 @@ class JournalView {
       exportCSV: document.getElementById('journalExportCSV'),
       exportTSV: document.getElementById('journalExportTSV'),
 
-      // Filter buttons
-      filterButtons: document.querySelectorAll('.journal-view .filter-btn')
+      // Filter dropdown
+      filterBtn: document.getElementById('journalFilterBtn'),
+      filterPanel: document.getElementById('journalFilterPanel'),
+      filterClose: document.getElementById('journalFilterClose'),
+      filterBackdrop: document.getElementById('journalFilterBackdrop'),
+      filterCount: document.getElementById('journalFilterCount'),
+      applyFilters: document.getElementById('journalApplyFilters'),
+      clearFilters: document.getElementById('journalClearFilters'),
+      statusBtns: document.querySelectorAll('#journalFilterPanel .filter-status-btn'),
+      typeCheckboxes: document.querySelectorAll('.journal-type-checkbox'),
+      allTypesCheckbox: document.getElementById('journalAllTypesCheckbox'),
+      dateFrom: document.getElementById('journalFilterDateFrom'),
+      dateTo: document.getElementById('journalFilterDateTo'),
+      datePresetBtns: document.querySelectorAll('#journalFilterPanel .filter-preset-btn')
     };
   }
 
@@ -71,11 +98,98 @@ class JournalView {
       });
     }
 
-    // Filter buttons
-    this.elements.filterButtons.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        this.setFilter(e.target.dataset.filter);
+    // Filter dropdown
+    if (this.elements.filterBtn) {
+      this.elements.filterBtn.addEventListener('click', () => this.toggleFilterPanel());
+    }
+
+    if (this.elements.filterClose) {
+      this.elements.filterClose.addEventListener('click', () => this.closeFilterPanel());
+    }
+
+    if (this.elements.applyFilters) {
+      this.elements.applyFilters.addEventListener('click', () => this.applyFilters());
+    }
+
+    if (this.elements.clearFilters) {
+      this.elements.clearFilters.addEventListener('click', () => this.clearAllFilters());
+    }
+
+    // Filter backdrop
+    if (this.elements.filterBackdrop) {
+      this.elements.filterBackdrop.addEventListener('click', () => this.closeFilterPanel());
+    }
+
+    // Status buttons
+    if (this.elements.statusBtns) {
+      this.elements.statusBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.elements.statusBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
       });
+    }
+
+    // All Types checkbox
+    if (this.elements.allTypesCheckbox) {
+      this.elements.allTypesCheckbox.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        this.elements.typeCheckboxes?.forEach(checkbox => {
+          checkbox.checked = isChecked;
+        });
+      });
+    }
+
+    // Individual type checkboxes - update "All Types" state
+    if (this.elements.typeCheckboxes) {
+      this.elements.typeCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+          const allChecked = Array.from(this.elements.typeCheckboxes).every(cb => cb.checked);
+          const noneChecked = Array.from(this.elements.typeCheckboxes).every(cb => !cb.checked);
+
+          if (this.elements.allTypesCheckbox) {
+            this.elements.allTypesCheckbox.checked = allChecked;
+            this.elements.allTypesCheckbox.indeterminate = !allChecked && !noneChecked;
+          }
+        });
+      });
+    }
+
+    // Date range preset buttons
+    if (this.elements.datePresetBtns) {
+      this.elements.datePresetBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const range = e.target.dataset.range;
+          this.handleDatePreset(range);
+        });
+      });
+    }
+
+    // Date inputs - clear preset selection and styling when manually changed
+    if (this.elements.dateFrom) {
+      this.elements.dateFrom.addEventListener('change', () => {
+        this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+        this.elements.dateFrom?.classList.remove('preset-value');
+        this.elements.dateTo?.classList.remove('preset-value');
+      });
+    }
+    if (this.elements.dateTo) {
+      this.elements.dateTo.addEventListener('change', () => {
+        this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+        this.elements.dateFrom?.classList.remove('preset-value');
+        this.elements.dateTo?.classList.remove('preset-value');
+      });
+    }
+
+    // Close panel when clicking outside
+    document.addEventListener('click', (e) => {
+      if (this.elements.filterPanel?.classList.contains('open')) {
+        const isClickInside = this.elements.filterBtn?.contains(e.target) ||
+                             this.elements.filterPanel?.contains(e.target);
+        if (!isClickInside) {
+          this.closeFilterPanel();
+        }
+      }
     });
 
     // Export buttons
@@ -102,15 +216,237 @@ class JournalView {
     }
   }
 
-  setFilter(filter) {
-    this.currentFilter = filter;
+  toggleFilterPanel() {
+    const isOpen = this.elements.filterPanel?.classList.contains('open');
+    if (isOpen) {
+      this.closeFilterPanel();
+    } else {
+      this.openFilterPanel();
+    }
+  }
 
-    // Update active button state
-    this.elements.filterButtons.forEach(btn => {
-      btn.classList.toggle('filter-btn--active', btn.dataset.filter === filter);
+  openFilterPanel() {
+    // Restore UI to match current applied filters
+    this.syncFilterUIToState();
+
+    this.elements.filterPanel?.classList.add('open');
+    this.elements.filterBtn?.classList.add('open');
+    this.elements.filterBackdrop?.classList.add('open');
+  }
+
+  closeFilterPanel() {
+    // Restore UI to last applied state when closing without applying
+    this.syncFilterUIToState();
+
+    this.elements.filterPanel?.classList.remove('open');
+    this.elements.filterBtn?.classList.remove('open');
+    this.elements.filterBackdrop?.classList.remove('open');
+  }
+
+  syncFilterUIToState() {
+    // Sync status buttons to current filter state
+    this.elements.statusBtns?.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.status === this.filters.status);
     });
 
+    // Sync type checkboxes to current filter state
+    if (this.filters.types.length === 0) {
+      // No types selected
+      this.elements.typeCheckboxes?.forEach(checkbox => {
+        checkbox.checked = false;
+      });
+      if (this.elements.allTypesCheckbox) {
+        this.elements.allTypesCheckbox.checked = false;
+        this.elements.allTypesCheckbox.indeterminate = false;
+      }
+    } else {
+      // Specific types selected
+      this.elements.typeCheckboxes?.forEach(checkbox => {
+        checkbox.checked = this.filters.types.includes(checkbox.value);
+      });
+
+      // Update "All Types" checkbox state
+      if (this.elements.allTypesCheckbox && this.elements.typeCheckboxes) {
+        const allChecked = Array.from(this.elements.typeCheckboxes).every(cb => cb.checked);
+        const noneChecked = Array.from(this.elements.typeCheckboxes).every(cb => !cb.checked);
+
+        this.elements.allTypesCheckbox.checked = allChecked;
+        this.elements.allTypesCheckbox.indeterminate = !allChecked && !noneChecked;
+      }
+    }
+
+    // Sync date range to current filter state
+    if (this.elements.dateFrom) {
+      this.elements.dateFrom.value = this.filters.dateFrom || '';
+    }
+    if (this.elements.dateTo) {
+      this.elements.dateTo.value = this.filters.dateTo || '';
+    }
+
+    // Determine which preset button should be active
+    const hasDateFilter = this.filters.dateFrom || this.filters.dateTo;
+    if (!hasDateFilter) {
+      // "All time" preset
+      this.elements.datePresetBtns?.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.range === 'all');
+      });
+      if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
+      if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
+    } else {
+      // Check if it matches a preset
+      const today = new Date().toISOString().split('T')[0];
+      let matchedPreset = false;
+
+      this.elements.datePresetBtns?.forEach(btn => {
+        const range = btn.dataset.range;
+        if (range !== 'all') {
+          const fromDate = new Date();
+          fromDate.setDate(fromDate.getDate() - parseInt(range));
+          const expectedFrom = fromDate.toISOString().split('T')[0];
+
+          if (this.filters.dateFrom === expectedFrom && this.filters.dateTo === today) {
+            btn.classList.add('active');
+            matchedPreset = true;
+            if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
+            if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
+          } else {
+            btn.classList.remove('active');
+          }
+        }
+      });
+
+      if (!matchedPreset) {
+        // Custom date range - no preset active
+        this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+        if (this.elements.dateFrom) this.elements.dateFrom.classList.remove('preset-value');
+        if (this.elements.dateTo) this.elements.dateTo.classList.remove('preset-value');
+      }
+    }
+  }
+
+  handleDatePreset(range) {
+    // Clear active state from all preset buttons
+    this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+
+    // Set active state on clicked button
+    const clickedBtn = Array.from(this.elements.datePresetBtns || []).find(
+      btn => btn.dataset.range === range
+    );
+    clickedBtn?.classList.add('active');
+
+    if (range === 'all') {
+      // Clear date inputs but keep gray styling for empty state
+      if (this.elements.dateFrom) {
+        this.elements.dateFrom.value = '';
+        this.elements.dateFrom.classList.add('preset-value');
+      }
+      if (this.elements.dateTo) {
+        this.elements.dateTo.value = '';
+        this.elements.dateTo.classList.add('preset-value');
+      }
+    } else {
+      // Calculate date range
+      const today = new Date();
+      const fromDate = new Date();
+      fromDate.setDate(today.getDate() - parseInt(range));
+
+      // Set date inputs and add preset styling
+      if (this.elements.dateFrom) {
+        this.elements.dateFrom.value = fromDate.toISOString().split('T')[0];
+        this.elements.dateFrom.classList.add('preset-value');
+      }
+      if (this.elements.dateTo) {
+        this.elements.dateTo.value = today.toISOString().split('T')[0];
+        this.elements.dateTo.classList.add('preset-value');
+      }
+    }
+  }
+
+  applyFilters() {
+    // Get selected status
+    const selectedStatus = Array.from(this.elements.statusBtns || [])
+      .find(btn => btn.classList.contains('active'))?.dataset.status || 'all';
+
+    // Get selected types
+    const selectedTypes = Array.from(this.elements.typeCheckboxes || [])
+      .filter(checkbox => checkbox.checked)
+      .map(checkbox => checkbox.value);
+
+    // Get date range
+    const dateFrom = this.elements.dateFrom?.value || null;
+    const dateTo = this.elements.dateTo?.value || null;
+
+    // Update filters
+    this.filters.status = selectedStatus;
+    this.filters.types = selectedTypes;
+    this.filters.dateFrom = dateFrom;
+    this.filters.dateTo = dateTo;
+
+    // Update filter count badge
+    this.updateFilterCount();
+
+    // Clear expanded rows before re-rendering
+    this.expandedRows.clear();
+
+    // Close panel and render
+    this.closeFilterPanel();
     this.render();
+  }
+
+  clearAllFilters() {
+    // Only reset the UI - don't apply until user clicks "Apply"
+    this.elements.statusBtns?.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.status === 'all');
+    });
+
+    // Uncheck all type checkboxes and "All Types"
+    this.elements.typeCheckboxes?.forEach(checkbox => {
+      checkbox.checked = false;
+    });
+    if (this.elements.allTypesCheckbox) {
+      this.elements.allTypesCheckbox.checked = false;
+      this.elements.allTypesCheckbox.indeterminate = false;
+    }
+
+    // Reset date inputs
+    if (this.elements.dateFrom) {
+      this.elements.dateFrom.value = '';
+      this.elements.dateFrom.classList.add('preset-value');
+    }
+    if (this.elements.dateTo) {
+      this.elements.dateTo.value = '';
+      this.elements.dateTo.classList.add('preset-value');
+    }
+
+    // Reset date preset buttons to "All time"
+    this.elements.datePresetBtns?.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.range === 'all');
+    });
+  }
+
+  updateFilterCount() {
+    let count = 0;
+
+    // Count status filter (if not "all")
+    if (this.filters.status !== 'all') {
+      count++;
+    }
+
+    // Count type filters
+    count += this.filters.types.length;
+
+    // Count date range filter
+    if (this.filters.dateFrom || this.filters.dateTo) {
+      count++;
+    }
+
+    // Update badge
+    if (count > 0) {
+      this.elements.filterCount.textContent = count;
+      this.elements.filterCount.style.display = 'inline-flex';
+    } else {
+      this.elements.filterCount.style.display = 'none';
+    }
   }
 
   handleSort(column) {
@@ -120,37 +456,69 @@ class JournalView {
       this.sortColumn = column;
       this.sortDirection = 'desc';
     }
+
+    // Clear expanded rows before re-rendering
+    this.expandedRows.clear();
+
     this.render();
   }
 
   getFilteredTrades() {
-    const entries = state.journal.entries;
+    let filtered = state.journal.entries;
 
-    let filtered;
-    switch (this.currentFilter) {
+    // Filter by status
+    switch (this.filters.status) {
       case 'open':
-        filtered = entries.filter(t => t.status === 'open');
+        filtered = filtered.filter(t => t.status === 'open');
         break;
       case 'trimmed':
-        filtered = entries.filter(t => t.status === 'trimmed');
+        filtered = filtered.filter(t => t.status === 'trimmed');
         break;
       case 'closed':
-        filtered = entries.filter(t => t.status === 'closed');
+        filtered = filtered.filter(t => t.status === 'closed');
         break;
       case 'winners':
-        filtered = entries.filter(t => {
+        filtered = filtered.filter(t => {
           const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
           return (t.status === 'closed' || t.status === 'trimmed') && pnl > 0;
         });
         break;
       case 'losers':
-        filtered = entries.filter(t => {
+        filtered = filtered.filter(t => {
           const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
           return (t.status === 'closed' || t.status === 'trimmed') && pnl < 0;
         });
         break;
       default:
-        filtered = entries;
+        break;
+    }
+
+    // Filter by types (if any selected)
+    if (this.filters.types.length > 0) {
+      filtered = filtered.filter(trade => {
+        const tradeType = trade.thesis?.setupType;
+        return tradeType && this.filters.types.includes(tradeType);
+      });
+    }
+
+    // Filter by date range
+    if (this.filters.dateFrom || this.filters.dateTo) {
+      filtered = filtered.filter(trade => {
+        const tradeDate = new Date(trade.timestamp);
+        const tradeDateOnly = tradeDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        let inRange = true;
+
+        if (this.filters.dateFrom) {
+          inRange = inRange && tradeDateOnly >= this.filters.dateFrom;
+        }
+
+        if (this.filters.dateTo) {
+          inRange = inRange && tradeDateOnly <= this.filters.dateTo;
+        }
+
+        return inRange;
+      });
     }
 
     // Sort
@@ -373,6 +741,17 @@ class JournalView {
 
     return `
       <div class="journal-row-details">
+        <div class="journal-row-details__section journal-row-details__section--chart">
+          <div class="journal-row-details__label">
+            Price Chart (scroll/zoom to explore ~4 months of history)
+            <span class="journal-row-details__chart-ticker">${trade.ticker}</span>
+          </div>
+          <div class="journal-row-details__chart-container" id="chart-${trade.id}">
+            <div class="journal-row-details__chart-loading">
+              <span>Loading chart...</span>
+            </div>
+          </div>
+        </div>
         <div class="journal-row-details__section">
           <div class="journal-row-details__label">Notes</div>
           <div class="journal-row-details__notes-container" data-trade-id="${trade.id}">
@@ -508,6 +887,138 @@ class JournalView {
     }
     if (detailsRow) {
       detailsRow.classList.toggle('expanded', this.expandedRows.has(id));
+    }
+
+    // Load chart if row is now expanded
+    if (this.expandedRows.has(id)) {
+      const trade = state.journal.entries.find(t => t.id === id);
+      if (trade) {
+        this.renderChart(trade);
+      }
+    }
+  }
+
+  async renderChart(trade) {
+    const chartContainer = document.getElementById(`chart-${trade.id}`);
+    if (!chartContainer) return;
+
+    // Import priceTracker
+    const { priceTracker } = await import('../../core/priceTracker.js');
+
+    try {
+      // Fetch historical candles - 1 year back + 3 months forward
+      const entryDate = new Date(trade.timestamp);
+      const candles = await priceTracker.fetchHistoricalCandles(trade.ticker, entryDate);
+
+      // Clear loading message
+      chartContainer.innerHTML = '';
+
+      // Create chart
+      const chart = LightweightCharts.createChart(chartContainer, {
+        width: chartContainer.clientWidth,
+        height: 400,
+        layout: {
+          background: { color: 'transparent' },
+          textColor: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        },
+        grid: {
+          vertLines: { color: getComputedStyle(document.documentElement).getPropertyValue('--border-subtle').trim() },
+          horzLines: { color: getComputedStyle(document.documentElement).getPropertyValue('--border-subtle').trim() },
+        },
+        timeScale: {
+          timeVisible: true,
+          borderColor: getComputedStyle(document.documentElement).getPropertyValue('--border-default').trim(),
+        },
+        rightPriceScale: {
+          borderColor: getComputedStyle(document.documentElement).getPropertyValue('--border-default').trim(),
+        },
+      });
+
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: getComputedStyle(document.documentElement).getPropertyValue('--success').trim(),
+        downColor: getComputedStyle(document.documentElement).getPropertyValue('--danger').trim(),
+        borderVisible: false,
+        wickUpColor: getComputedStyle(document.documentElement).getPropertyValue('--success').trim(),
+        wickDownColor: getComputedStyle(document.documentElement).getPropertyValue('--danger').trim(),
+        priceScaleId: 'right',
+      });
+
+      candleSeries.setData(candles);
+
+      // Add volume histogram
+      const volumeSeries = chart.addHistogramSeries({
+        color: getComputedStyle(document.documentElement).getPropertyValue('--primary').trim(),
+        priceFormat: {
+          type: 'volume',
+        },
+        priceScaleId: 'volume',
+      });
+
+      // Configure volume scale to be at bottom 20% of chart
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      });
+
+      // Extract volume data and color based on price movement
+      const volumeData = candles.map((candle, index) => {
+        const isUp = index === 0 ? true : candle.close >= candle.open;
+        return {
+          time: candle.time,
+          value: candle.volume,
+          color: isUp
+            ? getComputedStyle(document.documentElement).getPropertyValue('--success').trim() + '80' // Add transparency
+            : getComputedStyle(document.documentElement).getPropertyValue('--danger').trim() + '80'
+        };
+      });
+
+      volumeSeries.setData(volumeData);
+
+      // Add a marker for the entry day
+      // Normalize to UTC midnight to match candle timestamps
+      const entryDateOnly = trade.timestamp.split('T')[0]; // Get just YYYY-MM-DD
+      const entryTimestamp = Math.floor(new Date(entryDateOnly + 'T00:00:00Z').getTime() / 1000);
+      const markers = [{
+        time: entryTimestamp,
+        position: 'belowBar',
+        color: getComputedStyle(document.documentElement).getPropertyValue('--primary').trim(),
+        shape: 'arrowUp',
+        text: 'Entry @ ' + formatCurrency(trade.entry)
+      }];
+      candleSeries.setMarkers(markers);
+
+      // Set initial visible range: ~2.5 months before entry to ~2 weeks after
+      // This shows the setup and initial price action after entry
+      const daysBeforeEntry = 75; // ~2.5 months
+      const daysAfterEntry = 15; // ~2 weeks
+      const fromTime = entryTimestamp - (daysBeforeEntry * 24 * 60 * 60);
+      const toTime = entryTimestamp + (daysAfterEntry * 24 * 60 * 60);
+
+      chart.timeScale().setVisibleRange({
+        from: fromTime,
+        to: toTime
+      });
+
+      // Handle resize
+      const resizeObserver = new ResizeObserver(entries => {
+        if (entries.length === 0 || entries[0].target !== chartContainer) return;
+        const { width } = entries[0].contentRect;
+        chart.applyOptions({ width });
+      });
+      resizeObserver.observe(chartContainer);
+
+      // Store chart instance to clean up later
+      chartContainer._chartInstance = { chart, resizeObserver };
+    } catch (error) {
+      console.error('Failed to load chart:', error);
+      chartContainer.innerHTML = `
+        <div class="journal-row-details__chart-error">
+          <span>⚠️ ${error.message || 'Failed to load chart'}</span>
+          <p class="journal-row-details__chart-error-hint">Unable to fetch historical price data for this ticker</p>
+        </div>
+      `;
     }
   }
 

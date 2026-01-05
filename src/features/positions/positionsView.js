@@ -12,8 +12,12 @@ import { showToast } from '../../components/ui/ui.js';
 class PositionsView {
   constructor() {
     this.elements = {};
-    this.currentFilter = 'all';
+    this.filters = {
+      status: 'all',
+      types: [] // Array of selected type strings
+    };
     this.autoRefreshInterval = null;
+    this.hasAnimated = false;
   }
 
   init() {
@@ -29,6 +33,7 @@ class PositionsView {
     // Listen for view changes
     state.on('viewChanged', (data) => {
       if (data.to === 'positions') {
+        this.hasAnimated = false; // Reset animation flag when entering view
         this.render();
         this.startAutoRefresh();
       } else {
@@ -66,8 +71,17 @@ class PositionsView {
       emptyText: document.getElementById('positionsEmptyText'),
       goToDashboard: document.getElementById('positionsGoToDashboard'),
 
-      // Filter buttons
-      filterButtons: document.querySelectorAll('.positions-view .filter-btn')
+      // Filter dropdown
+      filterBtn: document.getElementById('positionsFilterBtn'),
+      filterPanel: document.getElementById('positionsFilterPanel'),
+      filterBackdrop: document.getElementById('positionsFilterBackdrop'),
+      filterClose: document.getElementById('positionsFilterClose'),
+      filterCount: document.getElementById('positionsFilterCount'),
+      applyFilters: document.getElementById('positionsApplyFilters'),
+      clearFilters: document.getElementById('positionsClearFilters'),
+      statusBtns: document.querySelectorAll('#positionsFilterPanel .filter-status-btn'),
+      typeAllCheckbox: document.getElementById('filterTypeAll'),
+      typeCheckboxes: document.querySelectorAll('#positionsFilterPanel input[type="checkbox"]:not(#filterTypeAll)')
     };
   }
 
@@ -86,38 +100,216 @@ class PositionsView {
       });
     }
 
-    // Filter buttons
-    this.elements.filterButtons.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        this.setFilter(e.target.dataset.filter);
+    // Filter dropdown
+    if (this.elements.filterBtn) {
+      this.elements.filterBtn.addEventListener('click', () => this.toggleFilterPanel());
+    }
+
+    if (this.elements.filterClose) {
+      this.elements.filterClose.addEventListener('click', () => this.closeFilterPanel());
+    }
+
+    if (this.elements.applyFilters) {
+      this.elements.applyFilters.addEventListener('click', () => this.applyFilters());
+    }
+
+    if (this.elements.clearFilters) {
+      this.elements.clearFilters.addEventListener('click', () => this.clearAllFilters());
+    }
+
+    // Close panel when clicking backdrop
+    if (this.elements.filterBackdrop) {
+      this.elements.filterBackdrop.addEventListener('click', () => this.closeFilterPanel());
+    }
+
+    // Status buttons
+    if (this.elements.statusBtns) {
+      this.elements.statusBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.elements.statusBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
       });
+    }
+
+    // Type filter "All Types" checkbox logic (master checkbox)
+    if (this.elements.typeAllCheckbox) {
+      this.elements.typeAllCheckbox.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        // Check/uncheck all specific type checkboxes
+        this.elements.typeCheckboxes?.forEach(checkbox => {
+          checkbox.checked = isChecked;
+        });
+      });
+    }
+
+    // Specific type checkboxes - update "All Types" state
+    this.elements.typeCheckboxes?.forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const allChecked = Array.from(this.elements.typeCheckboxes || []).every(cb => cb.checked);
+        const noneChecked = Array.from(this.elements.typeCheckboxes || []).every(cb => !cb.checked);
+
+        if (this.elements.typeAllCheckbox) {
+          this.elements.typeAllCheckbox.checked = allChecked;
+          this.elements.typeAllCheckbox.indeterminate = !allChecked && !noneChecked;
+        }
+      });
+    });
+
+    // Close panel when clicking outside
+    document.addEventListener('click', (e) => {
+      if (this.elements.filterPanel?.classList.contains('open')) {
+        const isClickInside = this.elements.filterBtn?.contains(e.target) ||
+                             this.elements.filterPanel?.contains(e.target);
+        if (!isClickInside) {
+          this.closeFilterPanel();
+        }
+      }
     });
   }
 
-  setFilter(filter) {
-    this.currentFilter = filter;
+  toggleFilterPanel() {
+    const isOpen = this.elements.filterPanel?.classList.contains('open');
+    if (isOpen) {
+      this.closeFilterPanel();
+    } else {
+      this.openFilterPanel();
+    }
+  }
 
-    // Update active button state
-    this.elements.filterButtons.forEach(btn => {
-      btn.classList.toggle('filter-btn--active', btn.dataset.filter === filter);
+  openFilterPanel() {
+    // Restore UI to match current applied filters
+    this.syncFilterUIToState();
+
+    this.elements.filterPanel?.classList.add('open');
+    this.elements.filterBtn?.classList.add('open');
+    this.elements.filterBackdrop?.classList.add('open');
+  }
+
+  closeFilterPanel() {
+    // Restore UI to last applied state when closing without applying
+    this.syncFilterUIToState();
+
+    this.elements.filterPanel?.classList.remove('open');
+    this.elements.filterBtn?.classList.remove('open');
+    this.elements.filterBackdrop?.classList.remove('open');
+  }
+
+  syncFilterUIToState() {
+    // Sync status buttons to current filter state
+    this.elements.statusBtns?.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.status === this.filters.status);
     });
 
+    // Sync type checkboxes to current filter state
+    if (this.filters.types.length === 0) {
+      // No types selected - uncheck everything
+      this.elements.typeCheckboxes?.forEach(checkbox => {
+        checkbox.checked = false;
+      });
+      if (this.elements.typeAllCheckbox) {
+        this.elements.typeAllCheckbox.checked = false;
+        this.elements.typeAllCheckbox.indeterminate = false;
+      }
+    } else {
+      // Specific types selected
+      this.elements.typeCheckboxes?.forEach(checkbox => {
+        checkbox.checked = this.filters.types.includes(checkbox.value);
+      });
+
+      // Update "All Types" checkbox state
+      if (this.elements.typeAllCheckbox && this.elements.typeCheckboxes) {
+        const allChecked = Array.from(this.elements.typeCheckboxes).every(cb => cb.checked);
+        const noneChecked = Array.from(this.elements.typeCheckboxes).every(cb => !cb.checked);
+
+        this.elements.typeAllCheckbox.checked = allChecked;
+        this.elements.typeAllCheckbox.indeterminate = !allChecked && !noneChecked;
+      }
+    }
+  }
+
+  applyFilters() {
+    // Get selected status
+    const selectedStatus = Array.from(this.elements.statusBtns || [])
+      .find(btn => btn.classList.contains('active'))?.dataset.status || 'all';
+
+    // Get selected types
+    const selectedTypes = Array.from(this.elements.typeCheckboxes || [])
+      .filter(checkbox => checkbox.checked)
+      .map(checkbox => checkbox.value);
+
+    // Update filters
+    this.filters.status = selectedStatus;
+    this.filters.types = selectedTypes;
+
+    // Update filter count badge
+    this.updateFilterCount();
+
+    // Reset animation flag to re-animate filtered cards
+    this.hasAnimated = false;
+
+    // Close panel and render
+    this.closeFilterPanel();
     this.render();
   }
 
+  clearAllFilters() {
+    // Only reset the UI - don't apply until user clicks "Apply"
+    this.elements.statusBtns?.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.status === 'all');
+    });
+
+    // Uncheck all type checkboxes including "All Types"
+    this.elements.typeCheckboxes?.forEach(checkbox => {
+      checkbox.checked = false;
+    });
+    if (this.elements.typeAllCheckbox) {
+      this.elements.typeAllCheckbox.checked = false;
+      this.elements.typeAllCheckbox.indeterminate = false;
+    }
+  }
+
+  updateFilterCount() {
+    let count = 0;
+
+    // Count status filter (if not "all")
+    if (this.filters.status !== 'all') {
+      count++;
+    }
+
+    // Count type filters
+    count += this.filters.types.length;
+
+    // Update badge
+    if (count > 0) {
+      this.elements.filterCount.textContent = count;
+      this.elements.filterCount.style.display = 'inline-flex';
+    } else {
+      this.elements.filterCount.style.display = 'none';
+    }
+  }
+
   getFilteredPositions() {
-    const activeTrades = state.journal.entries.filter(
+    let positions = state.journal.entries.filter(
       e => e.status === 'open' || e.status === 'trimmed'
     );
 
-    switch (this.currentFilter) {
-      case 'open':
-        return activeTrades.filter(t => t.status === 'open');
-      case 'trimmed':
-        return activeTrades.filter(t => t.status === 'trimmed');
-      default:
-        return activeTrades;
+    // Filter by status
+    if (this.filters.status === 'open') {
+      positions = positions.filter(t => t.status === 'open');
+    } else if (this.filters.status === 'trimmed') {
+      positions = positions.filter(t => t.status === 'trimmed');
     }
+
+    // Filter by types (if any selected)
+    if (this.filters.types.length > 0) {
+      positions = positions.filter(trade => {
+        const tradeType = trade.thesis?.setupType;
+        return tradeType && this.filters.types.includes(tradeType);
+      });
+    }
+
+    return positions;
   }
 
   render() {
@@ -131,8 +323,8 @@ class PositionsView {
       this.elements.positionsCount.textContent = `${allActiveCount} active position${allActiveCount !== 1 ? 's' : ''}`;
     }
 
-    // Render risk bar
-    this.renderRiskBar();
+    // Render risk bar with filtered positions
+    this.renderRiskBar(positions);
 
     // Show empty state or grid
     if (positions.length === 0) {
@@ -143,10 +335,13 @@ class PositionsView {
     }
   }
 
-  renderRiskBar() {
-    const activeTrades = state.journal.entries.filter(
-      e => e.status === 'open' || e.status === 'trimmed'
-    );
+  renderRiskBar(activeTrades) {
+    // Use filtered positions if provided, otherwise fall back to all active trades
+    if (!activeTrades) {
+      activeTrades = state.journal.entries.filter(
+        e => e.status === 'open' || e.status === 'trimmed'
+      );
+    }
 
     if (activeTrades.length === 0) {
       if (this.elements.openRisk) {
@@ -180,7 +375,7 @@ class PositionsView {
     }, 0);
 
     // Calculate total unrealized P&L
-    const pnlData = priceTracker.calculateTotalUnrealizedPnL();
+    const pnlData = priceTracker.calculateTotalUnrealizedPnL(activeTrades);
     const totalPnL = pnlData.totalPnL;
 
     const riskPercent = (totalRisk / state.account.currentSize) * 100;
@@ -217,6 +412,9 @@ class PositionsView {
   renderGrid(positions) {
     if (!this.elements.grid) return;
 
+    const shouldAnimate = !this.hasAnimated;
+    this.hasAnimated = true;
+
     this.elements.grid.innerHTML = positions.map(trade => {
       const shares = trade.remainingShares ?? trade.shares;
       const riskPerShare = trade.entry - trade.stop;
@@ -244,13 +442,24 @@ class PositionsView {
         statusText = 'Trimmed';
       }
 
+      // Get trade metadata
+      const setupType = trade.thesis?.setupType;
+      const companyName = trade.company?.name;
+      const industry = trade.company?.industry;
+
       return `
-        <div class="position-card ${isTrimmed ? 'position-card--trimmed' : ''}" data-id="${trade.id}">
+        <div class="position-card ${shouldAnimate ? 'position-card--animate' : ''} ${isTrimmed ? 'position-card--trimmed' : ''}" data-id="${trade.id}">
           <div class="position-card__header">
-            <span class="position-card__ticker">${trade.ticker}</span>
-            <span class="position-card__status position-card__status--${statusClass}">
-              ${statusText}
-            </span>
+            <div class="position-card__header-left">
+              <span class="position-card__ticker">${trade.ticker}</span>
+            </div>
+            <div class="position-card__badges">
+              ${industry ? `<span class="position-card__badge position-card__badge--industry">${industry}</span>` : ''}
+              ${setupType ? `<span class="position-card__badge position-card__badge--type">${setupType.replace(/\b\w/g, l => l.toUpperCase())}</span>` : ''}
+              <span class="position-card__badge position-card__badge--${statusClass}">
+                ${statusText}
+              </span>
+            </div>
           </div>
 
           <div class="position-card__details">
@@ -351,14 +560,14 @@ class PositionsView {
       // User has positions but none match the current filter
       if (this.elements.emptyTitle) {
         this.elements.emptyTitle.textContent =
-          this.currentFilter === 'trimmed' ? 'No Trimmed Positions' :
-          this.currentFilter === 'open' ? 'No Open Positions' :
+          this.filters.status === 'trimmed' ? 'No Trimmed Positions' :
+          this.filters.status === 'open' ? 'No Open Positions' :
           'No Positions';
       }
       if (this.elements.emptyText) {
         this.elements.emptyText.textContent =
-          this.currentFilter === 'trimmed' ? 'You don\'t have any trimmed positions yet.' :
-          this.currentFilter === 'open' ? 'You don\'t have any open positions.' :
+          this.filters.status === 'trimmed' ? 'You don\'t have any trimmed positions yet.' :
+          this.filters.status === 'open' ? 'You don\'t have any open positions.' :
           'No positions match this filter.';
       }
       // Hide the "Go to Dashboard" button when they already have positions

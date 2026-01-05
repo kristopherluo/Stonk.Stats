@@ -10,6 +10,7 @@ import { dataManager } from '../../core/dataManager.js';
 import { wizard } from '../../components/modals/wizard.js';
 import { confetti } from '../../components/ui/confetti.js';
 import { viewManager } from '../../components/ui/viewManager.js';
+import { priceTracker } from '../../core/priceTracker.js';
 
 class Journal {
   constructor() {
@@ -138,7 +139,7 @@ class Journal {
     window.deleteTrade = (id) => this.deleteTrade(id);
   }
 
-  logTrade(skipWizard = false) {
+  async logTrade(skipWizard = false) {
     const results = state.results;
     const trade = state.trade;
 
@@ -147,10 +148,44 @@ class Journal {
       return;
     }
 
+    // Validate ticker and fetch company data if API key is configured
+    let companyData = null;
+    if (priceTracker.apiKey && trade.ticker) {
+      try {
+        // Show loading toast
+        showToast('🔍 Validating ticker...', 'info');
+
+        // Fetch price to validate ticker and company profile in parallel
+        const [priceData, profileData] = await Promise.all([
+          priceTracker.fetchPrice(trade.ticker),
+          priceTracker.fetchCompanyProfile(trade.ticker)
+        ]);
+
+        companyData = profileData;
+        if (companyData) {
+          console.log('[Journal] ✅ Company data fetched:', companyData);
+        } else {
+          console.log('[Journal] ⚠️ No company data available for this ticker');
+        }
+      } catch (error) {
+        // If error contains "Invalid ticker", show specific error
+        if (error.message.includes('Invalid ticker')) {
+          showToast(`❌ ${error.message}`, 'error');
+        } else {
+          showToast(`❌ Failed to validate ticker: ${error.message}`, 'error');
+        }
+        return;
+      }
+    }
+
     // Check if wizard is enabled and should be used
     const wizardEnabled = state.journalMeta.settings.wizardEnabled || false;
-    
+
     if (wizardEnabled && !skipWizard) {
+      // Store company data in state for wizard to use
+      if (companyData) {
+        state.tempCompanyData = companyData;
+      }
       // Open wizard instead of directly logging
       wizard.open();
       return;
@@ -181,7 +216,8 @@ class Journal {
       pnl: null,
       thesis: null,
       wizardComplete: false,
-      wizardSkipped: []
+      wizardSkipped: [],
+      company: companyData // Store company data in entry
     };
 
     const newEntry = state.addJournalEntry(entry);

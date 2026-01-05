@@ -142,7 +142,8 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--border-radius-lg);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   margin-bottom: var(--space-4);
 }
 
@@ -576,4 +577,56 @@
     padding: var(--space-1) var(--space-2);
     font-size: var(--text-xs);
   }
+}
+
+/* Chart Section */
+.journal-row-details__section--chart {
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.journal-row-details__chart-ticker {
+  margin-left: var(--space-2);
+  font-weight: var(--font-bold);
+  color: var(--primary);
+  text-transform: uppercase;
+}
+
+.journal-row-details__chart-container {
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.journal-row-details__chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.journal-row-details__chart-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-4);
+}
+
+.journal-row-details__chart-error-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  opacity: 0.7;
+  margin: 0;
 }

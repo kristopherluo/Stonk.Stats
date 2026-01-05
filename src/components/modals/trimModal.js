@@ -49,7 +49,10 @@ class TrimModal {
       entryPriceInput: document.getElementById('trimEntryPriceInput'),
       entryPriceEdit: document.getElementById('trimEntryPriceEdit'),
       originalStopInput: document.getElementById('trimOriginalStopInput'),
-      originalStopEdit: document.getElementById('trimOriginalStopEdit')
+      originalStopEdit: document.getElementById('trimOriginalStopEdit'),
+      entryDateDisplay: document.getElementById('trimEntryDate'),
+      entryDateInput: document.getElementById('trimEntryDateInput'),
+      entryDateEdit: document.getElementById('trimEntryDateEdit')
     };
 
     // Cache sections for show/hide (done after modal is in DOM)
@@ -141,7 +144,7 @@ class TrimModal {
     // Reset edit mode
     this.isEditMode = false;
     if (this.elements.editPositionDetailsBtn) {
-      this.elements.editPositionDetailsBtn.textContent = 'Edit entry/stop';
+      this.elements.editPositionDetailsBtn.textContent = 'Edit trade details';
     }
 
     this.showAllSections();
@@ -187,6 +190,25 @@ class TrimModal {
     if (this.elements.stopLoss) this.elements.stopLoss.textContent = formatCurrency(currentStop);
     if (this.elements.riskPerShare) this.elements.riskPerShare.textContent = formatCurrency(riskPerShare);
     if (this.elements.remainingShares) this.elements.remainingShares.textContent = formatNumber(remainingShares);
+
+    // Populate entry date display and input
+    if (trade.timestamp) {
+      const entryDate = new Date(trade.timestamp);
+      const formattedDate = entryDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+
+      if (this.elements.entryDateDisplay) {
+        this.elements.entryDateDisplay.textContent = formattedDate;
+      }
+
+      if (this.elements.entryDateInput) {
+        // Format for date input (YYYY-MM-DD)
+        this.elements.entryDateInput.value = entryDate.toISOString().split('T')[0];
+      }
+    }
 
     // Populate edit input fields
     if (this.elements.entryPriceInput) this.elements.entryPriceInput.value = trade.entry.toFixed(2);
@@ -437,7 +459,24 @@ class TrimModal {
     } else {
       // Normal mode: Show display values, show all sections
       this.showDisplayValues();
-      this.showAllSections();
+
+      // Check if "only move stop" is checked - if so, keep fields hidden
+      const isOnlyMoveStop = this.elements.onlyMoveStopCheckbox?.checked;
+      if (isOnlyMoveStop) {
+        this.hideClosingFields();
+        // Update button text for "only move stop" mode
+        if (this.elements.confirmBtn) {
+          this.elements.confirmBtn.textContent = 'Confirm Move Stop';
+        }
+        // Hide "(optional)" text since new stop is required
+        if (this.elements.newStopOptional) {
+          this.elements.newStopOptional.style.display = 'none';
+        }
+      } else {
+        this.showAllSections();
+        // Recalculate preview to restore button text
+        this.calculatePreview();
+      }
 
       // Show the "new stop" section
       const newStopSection = this.elements.modal?.querySelector('.trim-section:has(#trimNewStop)');
@@ -447,11 +486,8 @@ class TrimModal {
 
       // Update buttons
       if (this.elements.editPositionDetailsBtn) {
-        this.elements.editPositionDetailsBtn.textContent = 'Edit entry/stop';
+        this.elements.editPositionDetailsBtn.textContent = 'Edit trade details';
       }
-
-      // Restore button text
-      this.calculatePreview();
     }
   }
 
@@ -463,6 +499,7 @@ class TrimModal {
       // Edit position details mode - update entry and original stop
       const newEntry = parseFloat(this.elements.entryPriceInput?.value);
       const newOriginalStop = parseFloat(this.elements.originalStopInput?.value);
+      const newEntryDate = this.elements.entryDateInput?.value;
 
       if (isNaN(newEntry) || newEntry <= 0) {
         showToast('⚠️ Please enter a valid entry price', 'error');
@@ -474,13 +511,19 @@ class TrimModal {
         return;
       }
 
+      if (!newEntryDate) {
+        showToast('⚠️ Please enter a valid entry date', 'error');
+        return;
+      }
+
       const oldEntry = this.currentTrade.entry;
       const oldOriginalStop = this.currentTrade.originalStop ?? this.currentTrade.stop;
 
       // Build updates object
       const updates = {
         entry: newEntry,
-        originalStop: newOriginalStop
+        originalStop: newOriginalStop,
+        timestamp: new Date(newEntryDate + 'T12:00:00').toISOString()
       };
 
       // If there's existing trim history, recalculate P&L for each trim

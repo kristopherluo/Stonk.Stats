@@ -5,6 +5,7 @@
 import { state } from '../../core/state.js';
 import { showToast } from '../ui/ui.js';
 import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput } from '../../core/utils.js';
+import { priceTracker } from '../../core/priceTracker.js';
 
 class TradeWizard {
   constructor() {
@@ -355,9 +356,9 @@ class TradeWizard {
     this.goToStep(step + 1);
   }
 
-  skipAll() {
+  async skipAll() {
     // Direct save without wizard
-    this.logTrade(false);
+    await this.logTrade(false);
     this.close();
   }
 
@@ -425,16 +426,35 @@ class TradeWizard {
     }
   }
 
-  confirmTrade() {
+  async confirmTrade() {
     this.collectStepData();
-    this.logTrade(true);
+    await this.logTrade(true);
     this.close();
   }
 
-  logTrade(wizardComplete = false) {
+  async logTrade(wizardComplete = false) {
     const trade = state.trade;
     const results = state.results;
     const account = state.account;
+
+    // Validate ticker if API key is configured
+    if (priceTracker.apiKey && trade.ticker) {
+      try {
+        // Show loading toast
+        showToast('🔍 Validating ticker...', 'info');
+
+        // Attempt to fetch price to validate ticker
+        await priceTracker.fetchPrice(trade.ticker);
+      } catch (error) {
+        // If error contains "Invalid ticker", show specific error
+        if (error.message.includes('Invalid ticker')) {
+          showToast(`❌ ${error.message}`, 'error');
+        } else {
+          showToast(`❌ Failed to validate ticker: ${error.message}`, 'error');
+        }
+        return;
+      }
+    }
 
     // Get custom trade date from calculator
     const tradeDateInput = document.getElementById('tradeDate');
@@ -460,8 +480,14 @@ class TradeWizard {
       // Thesis data
       thesis: this.hasThesisData() ? { ...this.thesis } : null,
       wizardComplete,
-      wizardSkipped: [...this.skippedSteps]
+      wizardSkipped: [...this.skippedSteps],
+
+      // Company data (fetched during validation)
+      company: state.tempCompanyData || null
     };
+
+    // Clear temp company data
+    delete state.tempCompanyData;
 
     // Add to journal
     const newEntry = state.addJournalEntry(entry);
