@@ -313,11 +313,19 @@ class EquityChart {
     }
 
     // Draw labels
-    indicesToShow.forEach(index => {
+    indicesToShow.forEach((index, i) => {
       const point = data[index];
       const x = scaleX(point.date);
       const label = this.formatDate(point.date);
-      this.ctx.fillText(label, x, y);
+
+      // Left-align first label to prevent overlap with y-axis
+      if (i === 0) {
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(label, x, y);
+        this.ctx.textAlign = 'center';
+      } else {
+        this.ctx.fillText(label, x, y);
+      }
     });
   }
 
