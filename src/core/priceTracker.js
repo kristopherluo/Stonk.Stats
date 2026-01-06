@@ -386,19 +386,72 @@ export const priceTracker = {
    * @returns {Promise<Array>} Array of candle data {time, open, high, low, close}
    */
   async fetchHistoricalCandles(ticker, entryDate, daysBack = 365, daysForward = 90) {
-    // Prefer Finnhub for historical data (better rate limits: 60/min vs Alpha Vantage 25/day)
-    if (this.apiKey) {
+    // Try Twelve Data first (800 calls/day free tier!)
+    const twelveDataKey = localStorage.getItem('twelveDataApiKey');
+    if (twelveDataKey) {
       try {
-        console.log(`Using Finnhub for chart data (60 calls/min vs Alpha Vantage 25 calls/day)`);
-        return await this.fetchHistoricalCandlesFromFinnhub(ticker, entryDate, daysBack, daysForward);
+        console.log(`Using Twelve Data for chart data (800 calls/day free tier)`);
+        return await this.fetchHistoricalCandlesFromTwelveData(ticker, entryDate, daysBack, twelveDataKey);
       } catch (error) {
-        console.error('Finnhub fetch failed, falling back to Alpha Vantage:', error);
-        // Fall through to Alpha Vantage
+        console.error('Twelve Data fetch failed, trying Alpha Vantage:', error);
       }
     }
 
     // Fallback to Alpha Vantage
+    console.log('Using Alpha Vantage for chart data (25 calls/day limit)');
     return await this.fetchHistoricalCandlesFromAlphaVantage(ticker, entryDate, daysBack, daysForward);
+  },
+
+  async fetchHistoricalCandlesFromTwelveData(ticker, entryDate, daysBack, apiKey) {
+    const entryDateObj = new Date(entryDate);
+    const fromDate = new Date(entryDateObj);
+    fromDate.setDate(fromDate.getDate() - daysBack);
+
+    // Twelve Data uses outputsize parameter (max 5000 for free tier)
+    // We'll request enough days to cover our range
+    const outputsize = Math.min(daysBack + 90, 5000);
+
+    console.log(`[Twelve Data] Fetching ${outputsize} days of data for ${ticker}`);
+
+    const url = `https://api.twelvedata.com/time_series?symbol=${ticker.toUpperCase()}&interval=1day&outputsize=${outputsize}&apikey=${apiKey}&format=JSON`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch data (${response.status})`);
+    }
+
+    const data = await response.json();
+
+    console.log('[Twelve Data] API Response:', data);
+
+    // Check for errors
+    if (data.status === 'error') {
+      throw new Error(data.message || 'Twelve Data API error');
+    }
+
+    if (!data.values || data.values.length === 0) {
+      throw new Error('No data available for this ticker from Twelve Data');
+    }
+
+    // Convert Twelve Data format to our candle format
+    // Twelve Data returns: {datetime, open, high, low, close, volume}
+    const candles = data.values
+      .map(item => {
+        const date = new Date(item.datetime);
+        return {
+          time: Math.floor(date.getTime() / 1000),
+          open: parseFloat(item.open),
+          high: parseFloat(item.high),
+          low: parseFloat(item.low),
+          close: parseFloat(item.close),
+          volume: parseFloat(item.volume || 0)
+        };
+      })
+      .sort((a, b) => a.time - b.time); // Sort oldest to newest
+
+    console.log(`[Twelve Data] Fetched ${candles.length} candles`);
+    return candles;
   },
 
   async fetchHistoricalCandlesFromFinnhub(ticker, entryDate, daysBack = 365, daysForward = 90) {

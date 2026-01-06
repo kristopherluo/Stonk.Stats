@@ -1436,6 +1436,28 @@
             ✓ Enables daily price charts (30 days) when viewing journal entries
           </span>
         </div>
+
+        <div class="form-group">
+          <label class="label">
+            Twelve Data API Key (Recommended for Charts)
+            <span class="tooltip">
+              <span class="tooltip__icon">?</span>
+              <span class="tooltip__content">Get a free API key at twelvedata.com. 800 calls/day free tier - much better than Alpha Vantage! Used for historical price charts.</span>
+            </span>
+          </label>
+          <input
+            type="text"
+            class="input input--mono"
+            id="twelveDataApiKey"
+            placeholder="Paste your Twelve Data API key here"
+          >
+          <span class="input-hint">
+            <a href="https://twelvedata.com/pricing" target="_blank" style="color: var(--color-primary);">Get free API key at twelvedata.com</a> - 800 calls/day on free tier (32x more than Alpha Vantage!)
+          </span>
+          <span class="input-hint" style="margin-top: var(--space-2); color: var(--text-success);">
+            ✓ Recommended: 800 calls/day vs Alpha Vantage's 25/day
+          </span>
+        </div>
       </div>
 
       <!-- Journal Settings -->

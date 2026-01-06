@@ -75,6 +75,7 @@ class Settings {
       // Price tracking
       finnhubApiKey: document.getElementById('finnhubApiKey'),
       alphaVantageApiKey: document.getElementById('alphaVantageApiKey'),
+      twelveDataApiKey: document.getElementById('twelveDataApiKey'),
 
       // Journal settings
       wizardEnabledToggle: document.getElementById('wizardEnabledToggle'),
@@ -257,6 +258,30 @@ class Settings {
           e.preventDefault();
           const apiKey = e.target.value.trim();
           saveAlphaVantageKey(apiKey);
+          e.target.blur();
+        }
+      });
+    }
+
+    // Twelve Data API Key
+    if (this.elements.twelveDataApiKey) {
+      const saveTwelveDataKey = (apiKey) => {
+        localStorage.setItem('twelveDataApiKey', apiKey);
+        if (apiKey) {
+          showToast('✅ Twelve Data API key saved - 800 calls/day for historical charts!', 'success');
+        }
+      };
+
+      this.elements.twelveDataApiKey.addEventListener('blur', (e) => {
+        const apiKey = e.target.value.trim();
+        saveTwelveDataKey(apiKey);
+      });
+
+      this.elements.twelveDataApiKey.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const apiKey = e.target.value.trim();
+          saveTwelveDataKey(apiKey);
           e.target.blur();
         }
       });
@@ -460,6 +485,11 @@ class Settings {
     // Set API key for historical prices
     if (alphaVantageKey) {
       historicalPrices.setApiKey(alphaVantageKey);
+    }
+
+    const twelveDataKey = localStorage.getItem('twelveDataApiKey') || '';
+    if (this.elements.twelveDataApiKey) {
+      this.elements.twelveDataApiKey.value = twelveDataKey;
     }
 
     // Update header
