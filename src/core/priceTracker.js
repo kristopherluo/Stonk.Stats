@@ -145,6 +145,55 @@ export const priceTracker = {
     }
   },
 
+  /**
+   * Fetch company summary/description from Alpha Vantage API
+   * Returns: { summary: string, name: string, sector: string, industry: string }
+   */
+  async fetchCompanySummary(ticker) {
+    const apiKey = localStorage.getItem('alphaVantageApiKey') || 'demo';
+
+    try {
+      console.log(`[Company Summary] Fetching overview for ${ticker}...`);
+      const response = await fetch(
+        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${ticker.toUpperCase()}&apikey=${apiKey}`
+      );
+
+      if (!response.ok) {
+        console.log(`[Company Summary] API request failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      console.log(`[Company Summary] Response for ${ticker}:`, data);
+
+      // Check for API errors
+      if (data['Error Message'] || data['Note'] || data['Information']) {
+        console.log(`[Company Summary] API error or rate limit for ${ticker}`);
+        return null;
+      }
+
+      // Alpha Vantage returns empty object if ticker not found
+      if (!data || Object.keys(data).length === 0 || !data.Symbol) {
+        console.log(`[Company Summary] No data found for ${ticker}`);
+        return null;
+      }
+
+      const overview = {
+        ticker: ticker.toUpperCase(),
+        name: data.Name || '',
+        sector: data.Sector || '',
+        industry: data.Industry || '',
+        summary: data.Description || ''
+      };
+
+      console.log(`[Company Summary] ✅ Successfully fetched overview for ${ticker}`);
+      return overview;
+    } catch (error) {
+      console.error(`[Company Summary] ❌ Failed to fetch overview for ${ticker}:`, error);
+      return null;
+    }
+  },
+
   async fetchPrices(tickers) {
     if (!this.apiKey) {
       throw new Error('Finnhub API key not configured. Add it in Settings.');

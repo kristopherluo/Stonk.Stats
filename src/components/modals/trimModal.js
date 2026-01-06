@@ -755,6 +755,7 @@ class TrimModal {
 
     this.close();
   }
+
 }
 
 export const trimModal = new TrimModal();

@@ -473,6 +473,129 @@
   margin-top: var(--space-2);
 }
 
+/* Journal Info Box - Combined Company Summary, Notes */
+.journal-info-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.journal-info-box__section {
+  padding: 12px 16px;
+}
+
+.journal-info-box__section:not(:last-child) {
+  border-bottom: 1px solid var(--border-default);
+}
+
+.journal-info-box__label {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+}
+
+.journal-info-box__content {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  text-align: center;
+}
+
+/* Editable notes */
+.journal-info-box__notes-editable {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  min-height: 1.5em;
+  cursor: text;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+  text-align: left;
+  margin-bottom: var(--space-2);
+}
+
+.journal-info-box__notes-editable:hover {
+  background: var(--bg-hover);
+}
+
+.journal-info-box__notes-editable:focus {
+  outline: none;
+}
+
+.journal-info-box__notes-editable:empty::before {
+  content: 'Click to add notes...';
+  color: var(--text-muted);
+}
+
+/* Bullet lists in notes */
+.journal-info-box__notes-editable ul {
+  margin: 0;
+  padding-left: 24px;
+  list-style-type: disc;
+}
+
+.journal-info-box__notes-editable li {
+  margin: 4px 0;
+  color: var(--text-primary);
+}
+
+/* Conviction in notes box */
+.conviction-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.conviction-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+}
+
+/* Conviction stars */
+.conviction-stars {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: var(--space-2);
+  cursor: pointer;
+}
+
+.conviction-star {
+  color: var(--text-primary);
+  font-size: 1.1em;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.conviction-star:not(.active) {
+  opacity: 0.3;
+}
+
+.conviction-star:hover,
+.conviction-stars:hover .conviction-star {
+  opacity: 0.3;
+}
+
+.conviction-stars:hover .conviction-star:hover,
+.conviction-stars:hover .conviction-star:hover ~ .conviction-star {
+  opacity: 0.3;
+}
+
+.conviction-stars:hover .conviction-star:hover,
+.conviction-stars:hover .conviction-star.hover-preview {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
 /* Trade log entries */
 .journal-row-details__trade-log {
   display: flex;

@@ -7,6 +7,7 @@ import { formatCurrency, formatPercent, formatDate } from '../../core/utils.js';
 import { trimModal } from '../../components/modals/trimModal.js';
 import { viewManager } from '../../components/ui/viewManager.js';
 import { dataManager } from '../../core/dataManager.js';
+import { priceTracker } from '../../core/priceTracker.js';
 
 class JournalView {
   constructor() {
@@ -785,10 +786,6 @@ class JournalView {
     return `
       <div class="journal-row-details">
         <div class="journal-row-details__section journal-row-details__section--chart">
-          <div class="journal-row-details__label">
-            Price Chart (scroll/zoom to explore ~4 months of history)
-            <span class="journal-row-details__chart-ticker">${trade.ticker}</span>
-          </div>
           <div class="journal-row-details__chart-container" id="chart-${trade.id}">
             <div class="journal-row-details__chart-loading">
               <span>Loading chart...</span>
@@ -796,31 +793,30 @@ class JournalView {
           </div>
         </div>
         <div class="journal-row-details__section">
-          <div class="journal-row-details__label">Notes</div>
-          <div class="journal-row-details__notes-container" data-trade-id="${trade.id}">
-            <div class="journal-row-details__notes-view">
-              <span class="journal-row-details__value">${trade.notes || 'No notes added'}</span>
-              <button class="btn btn--xs btn--ghost" data-action="edit-notes" data-id="${trade.id}">Edit</button>
+          <div class="journal-info-box">
+            <div class="journal-info-box__section" data-company-summary-section="${trade.id}">
+              <div class="journal-info-box__label">Company Summary</div>
+              <div class="journal-info-box__content" data-company-summary="${trade.id}">${trade.company?.summary || 'Loading company information...'}</div>
             </div>
-            <div class="journal-row-details__notes-edit" style="display: none;">
-              <textarea class="journal-row-details__notes-input" rows="3">${trade.notes || ''}</textarea>
-              <div class="journal-row-details__notes-actions">
-                <button class="btn btn--xs btn--primary" data-action="save-notes" data-id="${trade.id}">Save</button>
-                <button class="btn btn--xs btn--ghost" data-action="cancel-notes" data-id="${trade.id}">Cancel</button>
+            <div class="journal-info-box__section">
+              <div class="journal-info-box__label">Notes</div>
+              <div class="journal-info-box__notes-editable"
+                   contenteditable="true"
+                   data-trade-id="${trade.id}"
+                   data-action="edit-notes-inline">${trade.notes || ''}</div>
+              ${trade.thesis?.conviction ? `
+              <div class="conviction-container">
+                <span class="conviction-label">Conviction:</span>
+                <span class="conviction-stars" data-trade-id="${trade.id}" data-conviction="${trade.thesis.conviction}">
+                  ${[1, 2, 3, 4, 5].map(star =>
+                    `<span class="conviction-star ${star <= trade.thesis.conviction ? 'active' : ''}" data-star="${star}">★</span>`
+                  ).join('')}
+                </span>
               </div>
+              ` : ''}
             </div>
           </div>
         </div>
-        ${trade.thesis ? `
-        <div class="journal-row-details__section">
-          <div class="journal-row-details__label">Thesis</div>
-          <div class="journal-row-details__value">
-            ${trade.thesis.setup ? `Setup: ${trade.thesis.setup}` : ''}
-            ${trade.thesis.theme ? `<br>Theme: ${trade.thesis.theme}` : ''}
-            ${trade.thesis.conviction ? `<br>Conviction: ${'★'.repeat(trade.thesis.conviction)}${'☆'.repeat(5 - trade.thesis.conviction)}` : ''}
-          </div>
-        </div>
-        ` : ''}
         ${trade.trimHistory && trade.trimHistory.length > 0 ? `
         <div class="journal-row-details__section">
           <div class="journal-row-details__label">Trade Log</div>
@@ -874,42 +870,210 @@ class JournalView {
       });
     });
 
-    // Edit notes buttons
-    this.elements.tableBody.querySelectorAll('[data-action="edit-notes"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = parseInt(e.currentTarget.dataset.id);
-        const container = this.elements.tableBody.querySelector(`.journal-row-details__notes-container[data-trade-id="${id}"]`);
-        if (container) {
-          container.querySelector('.journal-row-details__notes-view').style.display = 'none';
-          container.querySelector('.journal-row-details__notes-edit').style.display = 'block';
-          container.querySelector('.journal-row-details__notes-input').focus();
+    // Inline notes editing
+    this.elements.tableBody.querySelectorAll('[data-action="edit-notes-inline"]').forEach(noteEl => {
+      const tradeId = parseInt(noteEl.dataset.tradeId);
+
+      // Auto-convert "- " to bullet point
+      noteEl.addEventListener('input', (e) => {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+
+        const range = selection.getRangeAt(0);
+        const textNode = range.startContainer;
+
+        // Only work with text nodes
+        if (textNode.nodeType !== Node.TEXT_NODE) return;
+
+        const textContent = textNode.textContent;
+        const cursorPos = range.startOffset;
+
+        // Check if the text just before cursor is "- "
+        if (cursorPos >= 2 && textContent.substring(cursorPos - 2, cursorPos) === '- ') {
+
+          // Get the text before and after the "- "
+          const beforeDash = textContent.substring(0, cursorPos - 2);
+          const afterDash = textContent.substring(cursorPos);
+          const combinedText = beforeDash + afterDash;
+
+          // Create a proper list structure
+          const ul = document.createElement('ul');
+          const li = document.createElement('li');
+
+          if (combinedText) {
+            li.textContent = combinedText;
+          } else {
+            li.innerHTML = '<br>'; // Empty li needs br for cursor
+          }
+
+          ul.appendChild(li);
+
+          // Find the element to replace (text node or its parent)
+          const parent = textNode.parentNode;
+
+          // Remove the original content and insert the list
+          if (parent === noteEl) {
+            // Direct child - replace text node with list
+            noteEl.replaceChild(ul, textNode);
+          } else {
+            // Parent is a div or other element - replace that
+            parent.parentNode.replaceChild(ul, parent);
+          }
+
+          // Set cursor in the li
+          const newRange = document.createRange();
+          const newSelection = window.getSelection();
+
+          if (li.firstChild) {
+            newRange.setStart(li.firstChild, combinedText.length);
+          } else {
+            newRange.setStart(li, 0);
+          }
+
+          newRange.collapse(true);
+          newSelection.removeAllRanges();
+          newSelection.addRange(newRange);
+        }
+      });
+
+      // Save on blur (when user clicks away)
+      noteEl.addEventListener('blur', () => {
+        // Use innerHTML to preserve formatting like bold, italic, bullets
+        const newNotes = noteEl.innerHTML.trim();
+        const trade = state.journal.entries.find(t => t.id === tradeId);
+
+        // Only update if notes actually changed
+        if (trade && trade.notes !== newNotes) {
+          // Update silently without triggering re-render
+          const tradeIndex = state.journal.entries.findIndex(t => t.id === tradeId);
+          if (tradeIndex !== -1) {
+            state.journal.entries[tradeIndex].notes = newNotes;
+            state.saveJournal();
+          }
+        }
+      });
+
+      // Keyboard shortcuts
+      noteEl.addEventListener('keydown', (e) => {
+        // Handle Enter key in lists
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+          const selection = window.getSelection();
+          if (!selection.rangeCount) return;
+
+          const range = selection.getRangeAt(0);
+          let currentNode = range.startContainer;
+
+          // Find if we're inside an li element
+          let li = currentNode.nodeType === Node.TEXT_NODE ? currentNode.parentElement : currentNode;
+          while (li && li !== noteEl && li.tagName !== 'LI') {
+            li = li.parentElement;
+          }
+
+          if (li && li.tagName === 'LI') {
+            e.preventDefault();
+
+            // Check if current li is empty
+            if (li.textContent.trim() === '') {
+              // Empty bullet - exit the list
+              const ul = li.parentElement;
+              const br = document.createElement('br');
+              ul.parentNode.insertBefore(br, ul.nextSibling);
+              li.remove();
+
+              // If ul is now empty, remove it
+              if (ul.children.length === 0) {
+                ul.remove();
+              }
+
+              // Set cursor after the br
+              const newRange = document.createRange();
+              const newSelection = window.getSelection();
+              newRange.setStartAfter(br);
+              newRange.collapse(true);
+              newSelection.removeAllRanges();
+              newSelection.addRange(newRange);
+            } else {
+              // Create a new list item
+              const newLi = document.createElement('li');
+              newLi.innerHTML = '<br>'; // Empty li needs br for cursor
+              li.parentElement.insertBefore(newLi, li.nextSibling);
+
+              // Set cursor in the new li
+              const newRange = document.createRange();
+              const newSelection = window.getSelection();
+              newRange.setStart(newLi, 0);
+              newRange.collapse(true);
+              newSelection.removeAllRanges();
+              newSelection.addRange(newRange);
+            }
+          }
+        }
+
+        // Save on Ctrl/Cmd + Enter
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          noteEl.blur();
+        }
+
+        // Bold with Ctrl/Cmd + B
+        if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+          e.preventDefault();
+          document.execCommand('bold');
+        }
+
+        // Italic with Ctrl/Cmd + I
+        if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+          e.preventDefault();
+          document.execCommand('italic');
+        }
+
+        // Underline with Ctrl/Cmd + U
+        if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+          e.preventDefault();
+          document.execCommand('underline');
         }
       });
     });
 
-    // Save notes buttons
-    this.elements.tableBody.querySelectorAll('[data-action="save-notes"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = parseInt(e.currentTarget.dataset.id);
-        const container = this.elements.tableBody.querySelector(`.journal-row-details__notes-container[data-trade-id="${id}"]`);
-        if (container) {
-          const newNotes = container.querySelector('.journal-row-details__notes-input').value;
-          state.updateJournalEntry(id, { notes: newNotes });
-        }
-      });
-    });
+    // Interactive conviction stars
+    this.elements.tableBody.querySelectorAll('.conviction-stars').forEach(starsContainer => {
+      const tradeId = parseInt(starsContainer.dataset.tradeId);
+      const stars = starsContainer.querySelectorAll('.conviction-star');
 
-    // Cancel notes buttons
-    this.elements.tableBody.querySelectorAll('[data-action="cancel-notes"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = parseInt(e.currentTarget.dataset.id);
-        const container = this.elements.tableBody.querySelector(`.journal-row-details__notes-container[data-trade-id="${id}"]`);
-        const trade = state.journal.entries.find(t => t.id === id);
-        if (container && trade) {
-          container.querySelector('.journal-row-details__notes-input').value = trade.notes || '';
-          container.querySelector('.journal-row-details__notes-view').style.display = 'flex';
-          container.querySelector('.journal-row-details__notes-edit').style.display = 'none';
-        }
+      // Hover preview
+      stars.forEach((star, index) => {
+        star.addEventListener('mouseenter', () => {
+          stars.forEach((s, i) => {
+            s.classList.toggle('hover-preview', i <= index);
+          });
+        });
+      });
+
+      // Reset on mouse leave
+      starsContainer.addEventListener('mouseleave', () => {
+        stars.forEach(s => s.classList.remove('hover-preview'));
+      });
+
+      // Click to update conviction
+      stars.forEach((star, index) => {
+        star.addEventListener('click', () => {
+          const newConviction = index + 1;
+          const trade = state.journal.entries.find(t => t.id === tradeId);
+
+          if (trade && trade.thesis && trade.thesis.conviction !== newConviction) {
+            // Update silently without triggering re-render
+            const tradeIndex = state.journal.entries.findIndex(t => t.id === tradeId);
+            if (tradeIndex !== -1) {
+              state.journal.entries[tradeIndex].thesis.conviction = newConviction;
+              state.saveJournal();
+
+              // Update the UI directly
+              stars.forEach((s, i) => {
+                s.classList.toggle('active', i < newConviction);
+              });
+            }
+          }
+        });
       });
     });
   }
@@ -932,11 +1096,12 @@ class JournalView {
       detailsRow.classList.toggle('expanded', this.expandedRows.has(id));
     }
 
-    // Load chart if row is now expanded
+    // Load chart and fetch company summary if row is now expanded
     if (this.expandedRows.has(id)) {
       const trade = state.journal.entries.find(t => t.id === id);
       if (trade) {
         this.renderChart(trade);
+        this.fetchAndDisplayCompanySummary(trade);
       }
     }
   }
@@ -944,6 +1109,11 @@ class JournalView {
   async renderChart(trade) {
     const chartContainer = document.getElementById(`chart-${trade.id}`);
     if (!chartContainer) return;
+
+    // Skip if chart already rendered (check if container has chart content)
+    if (chartContainer.children.length > 0 && !chartContainer.querySelector('.journal-row-details__chart-loading')) {
+      return;
+    }
 
     // Import priceTracker
     const { priceTracker } = await import('../../core/priceTracker.js');
@@ -1080,6 +1250,66 @@ class JournalView {
     }
     if (this.elements.empty) {
       this.elements.empty.classList.remove('journal-empty--visible');
+    }
+  }
+
+  async fetchAndDisplayCompanySummary(trade) {
+    // If summary already exists, no need to fetch
+    if (trade.company?.summary) {
+      return;
+    }
+
+    // Find the company summary element for this trade
+    const summaryContainer = document.querySelector(`[data-company-summary="${trade.id}"]`);
+    const summarySection = document.querySelector(`[data-company-summary-section="${trade.id}"]`);
+
+    if (!summaryContainer) {
+      console.log('Company summary container not found for trade', trade.id);
+      return;
+    }
+
+    // Show loading state
+    summaryContainer.textContent = 'Loading company information...';
+    summaryContainer.style.fontStyle = 'italic';
+    summaryContainer.style.color = 'var(--text-muted)';
+
+    // Fetch company summary from API
+    try {
+      console.log(`Fetching company summary for ${trade.ticker}...`);
+      const overview = await priceTracker.fetchCompanySummary(trade.ticker);
+
+      if (overview && overview.summary) {
+        // Trim whitespace from summary
+        const cleanSummary = overview.summary.trim();
+
+        // Update the trade with the company info
+        const companyData = {
+          name: overview.name,
+          sector: overview.sector,
+          industry: overview.industry,
+          summary: cleanSummary
+        };
+
+        state.updateJournalEntry(trade.id, { company: companyData });
+
+        // Display the summary
+        summaryContainer.textContent = cleanSummary;
+        summaryContainer.style.fontStyle = 'normal';
+        summaryContainer.style.color = '';
+        console.log(`Successfully fetched and saved company summary for ${trade.ticker}`);
+      } else {
+        // No summary available - hide the company summary section
+        console.log(`No company summary available for ${trade.ticker}`);
+        if (summarySection) {
+          summarySection.style.display = 'none';
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching company summary:', error);
+      // Hide on error
+      if (summarySection) {
+        summarySection.style.display = 'none';
+      }
     }
   }
 }
