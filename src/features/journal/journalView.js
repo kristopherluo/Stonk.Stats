@@ -1290,7 +1290,12 @@ class JournalView {
           summary: cleanSummary
         };
 
-        state.updateJournalEntry(trade.id, { company: companyData });
+        // Update silently without triggering re-render
+        const tradeIndex = state.journal.entries.findIndex(t => t.id === trade.id);
+        if (tradeIndex !== -1) {
+          state.journal.entries[tradeIndex].company = companyData;
+          state.saveJournal();
+        }
 
         // Display the summary
         summaryContainer.textContent = cleanSummary;
