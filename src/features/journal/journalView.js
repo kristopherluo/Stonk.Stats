@@ -1340,12 +1340,24 @@ class JournalView {
     // Fetch company summary from API
     try {
       console.log(`Fetching company summary for ${trade.ticker}...`);
-      const overview = await priceTracker.fetchCompanySummary(trade.ticker);
 
-      if (overview && overview.summary) {
-        // Trim whitespace from summary
-        const cleanSummary = overview.summary.trim();
+      let cleanSummary = '';
 
+      // First check if Finnhub description exists in company data
+      if (trade.company?.description) {
+        console.log('Using Finnhub description for summary');
+        cleanSummary = trade.company.description.trim();
+      } else {
+        // If no Finnhub description, try Alpha Vantage
+        console.log('No Finnhub description, fetching from Alpha Vantage...');
+        const overview = await priceTracker.fetchCompanySummary(trade.ticker);
+
+        if (overview && overview.summary) {
+          cleanSummary = overview.summary.trim();
+        }
+      }
+
+      if (cleanSummary) {
         // Only add summary to existing company data, don't overwrite industry
         // Industry should come from Finnhub (when position was created)
         const tradeIndex = state.journal.entries.findIndex(t => t.id === trade.id);

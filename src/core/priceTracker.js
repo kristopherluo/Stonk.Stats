@@ -181,7 +181,8 @@ export const priceTracker = {
       }
 
       const data = await response.json();
-      console.log(`[Company Profile] Response for ${ticker}:`, data);
+      console.log(`[Company Profile] Full Finnhub response for ${ticker}:`, data);
+      console.log(`[Company Profile] Available fields:`, Object.keys(data));
 
       // Finnhub returns empty object if ticker not found
       if (!data || Object.keys(data).length === 0 || !data.name) {
@@ -189,13 +190,18 @@ export const priceTracker = {
         return null;
       }
 
-      // Finnhub returns: name, finnhubIndustry, country, etc.
+      // Finnhub returns: name, finnhubIndustry, country, weburl, logo, etc.
+      // Check if there's a description field (not documented but might exist)
       // Normalize industry to title case
       const profile = {
         ticker: ticker.toUpperCase(),
         name: data.name || '',
         industry: this.toTitleCase(data.finnhubIndustry || ''),
-        country: data.country || ''
+        country: data.country || '',
+        weburl: data.weburl || '',
+        logo: data.logo || '',
+        // Check for any description-like fields
+        description: data.description || data.longBusinessSummary || ''
       };
 
       console.log(`[Company Profile] ✅ Successfully fetched profile for ${ticker}:`, profile);
@@ -380,8 +386,74 @@ export const priceTracker = {
    * @returns {Promise<Array>} Array of candle data {time, open, high, low, close}
    */
   async fetchHistoricalCandles(ticker, entryDate, daysBack = 365, daysForward = 90) {
+    // Prefer Finnhub for historical data (better rate limits: 60/min vs Alpha Vantage 25/day)
+    if (this.apiKey) {
+      try {
+        console.log(`Using Finnhub for chart data (60 calls/min vs Alpha Vantage 25 calls/day)`);
+        return await this.fetchHistoricalCandlesFromFinnhub(ticker, entryDate, daysBack, daysForward);
+      } catch (error) {
+        console.error('Finnhub fetch failed, falling back to Alpha Vantage:', error);
+        // Fall through to Alpha Vantage
+      }
+    }
+
+    // Fallback to Alpha Vantage
+    return await this.fetchHistoricalCandlesFromAlphaVantage(ticker, entryDate, daysBack, daysForward);
+  },
+
+  async fetchHistoricalCandlesFromFinnhub(ticker, entryDate, daysBack = 365, daysForward = 90) {
+    const entryDateObj = new Date(entryDate);
+    const fromDate = new Date(entryDateObj);
+    fromDate.setDate(fromDate.getDate() - daysBack);
+
+    const toDate = new Date(entryDateObj);
+    toDate.setDate(toDate.getDate() + daysForward);
+
+    // Don't fetch future data beyond today
+    const today = new Date();
+    if (toDate > today) {
+      toDate.setTime(today.getTime());
+    }
+
+    const fromTimestamp = Math.floor(fromDate.getTime() / 1000);
+    const toTimestamp = Math.floor(toDate.getTime() / 1000);
+
+    console.log(`[Finnhub] Fetching chart data: ${ticker} from ${fromDate.toDateString()} to ${toDate.toDateString()}`);
+
+    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker.toUpperCase()}&resolution=D&from=${fromTimestamp}&to=${toTimestamp}&token=${this.apiKey}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch data (${response.status})`);
+    }
+
+    const data = await response.json();
+
+    // Finnhub returns {s: "ok", t: [timestamps], o: [opens], h: [highs], l: [lows], c: [closes], v: [volumes]}
+    if (data.s !== 'ok' || !data.t || data.t.length === 0) {
+      throw new Error('No data available for this ticker from Finnhub');
+    }
+
+    // Convert Finnhub format to our candle format
+    const candles = data.t.map((timestamp, index) => ({
+      time: timestamp,
+      open: data.o[index],
+      high: data.h[index],
+      low: data.l[index],
+      close: data.c[index],
+      volume: data.v[index]
+    }));
+
+    console.log(`[Finnhub] Fetched ${candles.length} candles`);
+    return candles;
+  },
+
+  async fetchHistoricalCandlesFromAlphaVantage(ticker, entryDate, daysBack = 365, daysForward = 90) {
     // Use Alpha Vantage API key if available, otherwise use demo key (limited to IBM, AAPL, MSFT, etc.)
     const apiKey = localStorage.getItem('alphaVantageApiKey') || 'demo';
+
+    console.log('[Alpha Vantage] Fetching chart data (WARNING: 25 calls/day limit)');
 
     try {
       // Use compact outputsize (100 most recent data points = ~4-5 months)
