@@ -1106,6 +1106,56 @@ class JournalView {
     }
   }
 
+  // Check if we should fetch chart data for a ticker today
+  shouldFetchChartData(ticker) {
+    const cache = this.getChartCache();
+    const today = new Date().toDateString();
+
+    if (cache[ticker] && cache[ticker].date === today && cache[ticker].data) {
+      return false; // Already fetched today
+    }
+
+    return true; // Need to fetch
+  }
+
+  // Get chart cache from localStorage
+  getChartCache() {
+    try {
+      const cache = localStorage.getItem('chartDataCache');
+      return cache ? JSON.parse(cache) : {};
+    } catch (e) {
+      console.error('Error reading chart cache:', e);
+      return {};
+    }
+  }
+
+  // Save chart data to cache
+  saveChartData(ticker, data) {
+    try {
+      const cache = this.getChartCache();
+      cache[ticker] = {
+        date: new Date().toDateString(),
+        data: data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('chartDataCache', JSON.stringify(cache));
+    } catch (e) {
+      console.error('Error saving chart cache:', e);
+    }
+  }
+
+  // Get cached chart data for a ticker
+  getCachedChartData(ticker) {
+    const cache = this.getChartCache();
+    const today = new Date().toDateString();
+
+    if (cache[ticker] && cache[ticker].date === today && cache[ticker].data) {
+      return cache[ticker].data;
+    }
+
+    return null;
+  }
+
   async renderChart(trade) {
     const chartContainer = document.getElementById(`chart-${trade.id}`);
     if (!chartContainer) return;
@@ -1119,9 +1169,23 @@ class JournalView {
     const { priceTracker } = await import('../../core/priceTracker.js');
 
     try {
-      // Fetch historical candles - 1 year back + 3 months forward
-      const entryDate = new Date(trade.timestamp);
-      const candles = await priceTracker.fetchHistoricalCandles(trade.ticker, entryDate);
+      let candles;
+
+      // Check if we have cached data for today
+      const cachedData = this.getCachedChartData(trade.ticker);
+
+      if (cachedData) {
+        console.log(`Using cached chart data for ${trade.ticker}`);
+        candles = cachedData;
+      } else {
+        // Fetch historical candles - 1 year back + 3 months forward
+        console.log(`Fetching fresh chart data for ${trade.ticker}`);
+        const entryDate = new Date(trade.timestamp);
+        candles = await priceTracker.fetchHistoricalCandles(trade.ticker, entryDate);
+
+        // Save to cache
+        this.saveChartData(trade.ticker, candles);
+      }
 
       // Clear loading message
       chartContainer.innerHTML = '';
