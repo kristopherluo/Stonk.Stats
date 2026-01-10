@@ -150,23 +150,23 @@
 }
 
 .btn--ghost {
-  background: transparent;
-  border: 1.5px solid transparent;
-  color: var(--text-secondary);
-  font-weight: 500;
-  box-shadow: none;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1.5px solid rgba(96, 165, 250, 0.4);
+  color: #60a5fa;
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+  box-shadow:
+    0 0 8px rgba(96, 165, 250, 0.2),
+    inset 0 0 8px rgba(96, 165, 250, 0.1);
 }
 
 .btn--ghost:hover {
-  background:
-    radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.08) 0%, transparent 70%),
-    var(--bg-hover);
-  border-color: rgba(96, 165, 250, 0.2);
-  color: var(--text-primary);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.7);
+  color: #60a5fa;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
   box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.5),
-    0 0 8px rgba(59, 130, 246, 0.15),
-    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+    0 0 16px rgba(96, 165, 250, 0.4),
+    inset 0 0 12px rgba(96, 165, 250, 0.15);
 }
 
 .btn--full {
@@ -190,31 +190,20 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  color: var(--text-secondary);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.05) 0%, transparent 70%),
-    linear-gradient(145deg, #0a0a0a 0%, #000000 100%);
-  border: 1.5px solid rgba(96, 165, 250, 0.3);
+  color: #60a5fa;
+  background: transparent;
+  border: none;
   border-radius: var(--border-radius);
   cursor: pointer;
   transition: all var(--transition-fast);
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.6),
-    0 0 8px rgba(59, 130, 246, 0.2),
-    inset 0 1px 1px rgba(255, 255, 255, 0.03);
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.5));
 }
 
 .icon-btn:hover {
-  color: var(--primary);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 70%),
-    linear-gradient(145deg, #0f0f0f 0%, #000000 100%);
-  border-color: rgba(96, 165, 250, 0.5);
-  text-shadow: 0 0 8px rgba(96, 165, 250, 0.4);
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.7),
-    0 0 12px rgba(59, 130, 246, 0.3),
-    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  color: #60a5fa;
+  background: transparent;
+  border: none;
+  filter: drop-shadow(0 0 16px rgba(96, 165, 250, 1)) drop-shadow(0 0 28px rgba(96, 165, 250, 0.6));
 }
 
 .icon-btn:focus {
@@ -1631,6 +1620,31 @@ input[type="date"].input:focus {
   justify-content: space-between;
   padding: var(--space-5);
   border-bottom: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+/* Settings panel close button - glowy box styling */
+.settings-panel__header .icon-btn {
+  width: 32px;
+  height: 32px;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1.5px solid rgba(96, 165, 250, 0.4);
+  color: #60a5fa;
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+  box-shadow:
+    0 0 8px rgba(96, 165, 250, 0.2),
+    inset 0 0 8px rgba(96, 165, 250, 0.1);
+  filter: none;
+}
+
+.settings-panel__header .icon-btn:hover {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.7);
+  color: #60a5fa;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
+  box-shadow:
+    0 0 16px rgba(96, 165, 250, 0.4),
+    inset 0 0 12px rgba(96, 165, 250, 0.15);
+  filter: none;
 }
 
 .settings-panel__title {
@@ -4774,21 +4788,30 @@ input[type="date"].input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 1.5rem;
+  width: 32px;
+  height: 32px;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1.5px solid rgba(96, 165, 250, 0.4);
+  color: #60a5fa;
+  font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius);
   transition: all var(--transition-fast);
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+  box-shadow:
+    0 0 8px rgba(96, 165, 250, 0.2),
+    inset 0 0 8px rgba(96, 165, 250, 0.1);
 }
 
 .filter-dropdown__close:hover {
-  background: var(--bg-hover);
-  color: var(--text);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.7);
+  color: #60a5fa;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
+  box-shadow:
+    0 0 16px rgba(96, 165, 250, 0.4),
+    inset 0 0 12px rgba(96, 165, 250, 0.15);
 }
 
 .filter-dropdown__section {
@@ -5154,19 +5177,26 @@ input[type="date"].input:focus {
   flex-shrink: 0;
 }
 
-.filter-date-inputs input[type="date"] {
+.filter-date-inputs input[type="date"],
+.filter-date-inputs input[type="text"] {
   color-scheme: dark;
   height: 36px;
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  flex: 1;
+  width: 100px !important;
 }
 
-.filter-date-inputs input[type="date"].preset-value {
+/* Flatpickr inputs in filters */
+.filter-date-inputs input.flatpickr-input {
+  width: 100px !important;
+}
+
+.filter-date-inputs input[type="date"].preset-value,
+.filter-date-inputs input[type="text"].preset-value {
   color: var(--text-muted);
 }
 
-.filter-date-inputs input[type="date"]::placeholder {
+.filter-date-inputs input::placeholder {
   color: var(--text-muted);
   opacity: 0.6;
 }
@@ -5180,6 +5210,7 @@ input[type="date"].input:focus {
   opacity: 1;
 }
 
-[data-theme="light"] .filter-date-inputs input[type="date"] {
+[data-theme="light"] .filter-date-inputs input[type="date"],
+[data-theme="light"] .filter-date-inputs input[type="text"] {
   color-scheme: light;
 }

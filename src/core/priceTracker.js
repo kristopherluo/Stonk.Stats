@@ -128,7 +128,6 @@ export const priceTracker = {
         const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
         if (age < thirtyDays) {
-          console.log(`[Company Profile] Using cached data for ${ticker}`);
           return data;
         }
       }
@@ -219,7 +218,6 @@ export const priceTracker = {
       throw new Error('Alpha Vantage API key not configured. Add it in Settings to fetch company summaries.');
     }
 
-    console.log(`[Company Summary] Using Alpha Vantage for ${ticker}`);
     return await this.fetchCompanySummaryFromAlphaVantage(ticker, alphaVantageKey);
   },
 
@@ -413,7 +411,6 @@ export const priceTracker = {
       throw new Error('Twelve Data API key not configured. Add it in Settings to view charts.');
     }
 
-    console.log(`Using Twelve Data for chart data (800 calls/day free tier)`);
     return await this.fetchHistoricalCandlesFromTwelveData(ticker, entryDate, daysBack, twelveDataKey);
   },
 

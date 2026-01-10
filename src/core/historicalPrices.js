@@ -103,7 +103,6 @@ class HistoricalPrices {
 
       // Check if we already have recent data (within last 7 days)
       if (this.hasRecentData(ticker)) {
-        console.log(`Using cached data for ${ticker}`);
         results[ticker] = this.cache[ticker];
         continue;
       }

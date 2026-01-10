@@ -106,3 +106,124 @@ export function createTimestampFromDateInput(dateInputValue) {
   }
   return new Date(dateInputValue + 'T12:00:00').toISOString();
 }
+
+// Initialize Flatpickr date picker with weekend disabling and custom options
+export function initFlatpickr(dateInput, options = {}) {
+  if (!dateInput) return null;
+  if (!window.flatpickr) {
+    console.error('Flatpickr library not loaded');
+    return null;
+  }
+
+  // Default configuration
+  const defaultConfig = {
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: 'M j, Y', // e.g., "Jan 10, 2026"
+    animate: true,
+    // Disable weekends
+    disable: [
+      function(date) {
+        // Return true to disable the date
+        return (date.getDay() === 0 || date.getDay() === 6); // Sunday = 0, Saturday = 6
+      }
+    ],
+    // Prevent future dates
+    maxDate: 'today',
+    // Position calendar below input
+    position: 'auto',
+    // Allow input
+    allowInput: false,
+    // Close on selection
+    static: false,
+    // Show week numbers
+    weekNumbers: false,
+    // First day of week (0 = Sunday, 1 = Monday)
+    locale: {
+      firstDayOfWeek: 0 // Start with Sunday
+    },
+    // Convert year input to dropdown
+    onReady: function(selectedDates, dateStr, instance) {
+      setTimeout(() => {
+        const yearInput = instance.calendarContainer.querySelector('.cur-year');
+        if (yearInput && !yearInput.dataset.convertedToDropdown) {
+          yearInput.dataset.convertedToDropdown = 'true';
+
+          // Create a select element
+          const yearSelect = document.createElement('select');
+          yearSelect.className = 'cur-year';
+
+          // Generate year options (from 10 years ago to current year)
+          const currentYear = new Date().getFullYear();
+          const startYear = currentYear - 10;
+
+          for (let year = currentYear; year >= startYear; year--) {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            if (year === parseInt(yearInput.value)) {
+              option.selected = true;
+            }
+            yearSelect.appendChild(option);
+          }
+
+          // Handle year change
+          yearSelect.addEventListener('change', function() {
+            instance.changeYear(parseInt(this.value));
+          });
+
+          // Replace the input with the select
+          yearInput.parentNode.replaceChild(yearSelect, yearInput);
+        }
+      }, 50);
+    }
+  };
+
+  // Merge with custom options
+  const config = { ...defaultConfig, ...options };
+
+  // Initialize flatpickr
+  const fp = flatpickr(dateInput, config);
+
+  return fp;
+}
+
+// Legacy function - kept for backwards compatibility, now uses flatpickr
+export function disableWeekendsOnDateInput(dateInput) {
+  // This function is deprecated - use initFlatpickr instead
+  return initFlatpickr(dateInput);
+}
+
+// Get previous business day (skip weekends)
+export function getPreviousBusinessDay(date) {
+  const result = new Date(date);
+  result.setDate(result.getDate() - 1);
+
+  // If it's Sunday (0), go back to Friday
+  if (result.getDay() === 0) {
+    result.setDate(result.getDate() - 2);
+  }
+  // If it's Saturday (6), go back to Friday
+  else if (result.getDay() === 6) {
+    result.setDate(result.getDate() - 1);
+  }
+
+  return result;
+}
+
+// Get current weekday (or last Friday if today is weekend)
+export function getCurrentWeekday() {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+
+  // If Saturday (6), go back to Friday
+  if (dayOfWeek === 6) {
+    today.setDate(today.getDate() - 1);
+  }
+  // If Sunday (0), go back to Friday
+  else if (dayOfWeek === 0) {
+    today.setDate(today.getDate() - 2);
+  }
+
+  return today;
+}

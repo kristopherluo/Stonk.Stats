@@ -36,6 +36,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Outfit:wght@400;500;600;700&family=Fira+Code:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 
+  <!-- Flatpickr Date Picker -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+
   <!-- Styles -->
   <link rel="stylesheet" href="src/styles/variables.css">
   <link rel="stylesheet" href="src/styles/base.css">
@@ -46,6 +49,7 @@
   <link rel="stylesheet" href="src/features/positions/positions.css">
   <link rel="stylesheet" href="src/features/journal/journal.css">
   <link rel="stylesheet" href="src/features/stats/stats.css">
+  <link rel="stylesheet" href="src/styles/flatpickr-theme.css">
 </head>
 <body>
   <div class="app">
@@ -53,7 +57,7 @@
     <header class="header">
       <div class="header__brand">
         <a href="#" class="header__logo-link">
-          <span class="header__logo"><span class="header__logo-dollar">$</span>tonk.<span class="header__logo-highlight">Stats</span></span>
+          <span class="header__logo">$tonk.<span class="header__logo-highlight">stats</span></span>
         </a>
         <!-- Mobile nav trigger (stays in header) -->
         <button class="mobile-nav-trigger" id="mobileNavTrigger" aria-label="Toggle navigation">
@@ -124,15 +128,15 @@
           <span class="positions-risk-bar__value" id="positionsOpenRisk">$0.00</span>
         </div>
         <div class="positions-risk-bar__divider"></div>
+        <div class="positions-risk-bar__item">
+          <span class="positions-risk-bar__label">Active</span>
+          <span class="positions-risk-bar__value" id="positionsCount">0</span>
+        </div>
+        <div class="positions-risk-bar__divider"></div>
         <div class="positions-risk-bar__item positions-risk-bar__item--risk-level">
           <span class="positions-risk-bar__label">Risk Level</span>
           <span class="positions-risk-bar__value positions-risk-bar__value--indicator" id="positionsRiskLevel">LOW</span>
           <div class="risk-level-tooltip" id="riskLevelTooltip">Portfolio risk under 0.5% - conservative position sizing</div>
-        </div>
-        <div class="positions-risk-bar__divider"></div>
-        <div class="positions-risk-bar__item">
-          <span class="positions-risk-bar__label">Active</span>
-          <span class="positions-risk-bar__value" id="positionsCount">0</span>
         </div>
         <button class="btn btn--primary positions-new-btn" id="positionsNewBtn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -368,11 +372,11 @@
                 <div class="filter-date-inputs">
                   <div class="input-wrapper input-wrapper--sm">
                     <label class="input-label">From</label>
-                    <input type="date" class="input" id="journalFilterDateFrom" placeholder="mm/dd/yyyy">
+                    <input type="text" class="input" id="journalFilterDateFrom" size="15">
                   </div>
                   <div class="input-wrapper input-wrapper--sm">
                     <label class="input-label">To</label>
-                    <input type="date" class="input" id="journalFilterDateTo" placeholder="mm/dd/yyyy">
+                    <input type="text" class="input" id="journalFilterDateTo" size="15">
                   </div>
                 </div>
               </div>
@@ -451,11 +455,11 @@
                 <div class="filter-date-inputs">
                   <div class="input-wrapper input-wrapper--sm">
                     <label class="input-label">From</label>
-                    <input type="date" class="input" id="statsFilterDateFrom" placeholder="mm/dd/yyyy">
+                    <input type="text" class="input" id="statsFilterDateFrom" size="15">
                   </div>
                   <div class="input-wrapper input-wrapper--sm">
                     <label class="input-label">To</label>
-                    <input type="date" class="input" id="statsFilterDateTo" placeholder="mm/dd/yyyy">
+                    <input type="text" class="input" id="statsFilterDateTo" size="15">
                   </div>
                 </div>
               </div>
@@ -1280,6 +1284,7 @@
 
   <!-- Scripts -->
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

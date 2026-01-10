@@ -4,7 +4,7 @@
 
 import { state } from '../../core/state.js';
 import { showToast } from '../ui/ui.js';
-import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput } from '../../core/utils.js';
+import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput, initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
 import { priceTracker } from '../../core/priceTracker.js';
 
 class TradeWizard {
@@ -28,6 +28,14 @@ class TradeWizard {
     this.cacheElements();
     this.bindEvents();
     this.initNotesEditor();
+    this.disableWeekends();
+  }
+
+  disableWeekends() {
+    // Initialize trade date with default to current weekday (or last Friday if weekend)
+    initFlatpickr(this.elements.wizardTradeDate, {
+      defaultDate: getCurrentWeekday()
+    });
   }
 
   initNotesEditor() {
@@ -623,9 +631,6 @@ class TradeWizard {
         ]);
 
         companyData = profileData;
-        if (companyData) {
-          console.log('[Wizard] Company data fetched:', companyData);
-        }
       } catch (error) {
         // If error contains "Invalid ticker", show specific error
         if (error.message.includes('Invalid ticker')) {

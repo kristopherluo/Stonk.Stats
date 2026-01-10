@@ -233,11 +233,6 @@ class Journal {
         ]);
 
         companyData = profileData;
-        if (companyData) {
-          console.log('[Journal] ✅ Company data fetched:', companyData);
-        } else {
-          console.log('[Journal] ⚠️ No company data available for this ticker');
-        }
       } catch (error) {
         // If error contains "Invalid ticker", show specific error
         if (error.message.includes('Invalid ticker')) {

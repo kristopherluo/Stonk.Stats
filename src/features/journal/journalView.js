@@ -3,7 +3,7 @@
  */
 
 import { state } from '../../core/state.js';
-import { formatCurrency, formatPercent, formatDate } from '../../core/utils.js';
+import { formatCurrency, formatPercent, formatDate, initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
 import { trimModal } from '../../components/modals/trimModal.js';
 import { viewManager } from '../../components/ui/viewManager.js';
 import { dataManager } from '../../core/dataManager.js';
@@ -23,10 +23,17 @@ class JournalView {
     this.sortDirection = 'desc';
     this.expandedRows = new Set();
     this.hasAnimated = false;
+    // Store flatpickr instances
+    this.dateFromPicker = null;
+    this.dateToPicker = null;
   }
 
   init() {
     this.cacheElements();
+
+    // Initialize date pickers before binding events
+    this.disableWeekends();
+
     this.bindEvents();
 
     // Initialize all type checkboxes to be checked (matching "All Types" default state)
@@ -36,9 +43,16 @@ class JournalView {
       });
     }
 
-    // Initialize date inputs with gray styling since "All time" is default
-    if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
-    if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
+    // Initialize Max preset dates (earliest trade to today)
+    this.handleDatePreset('max');
+
+    // Apply the Max preset to filters so date range indicator updates
+    const dateFrom = this.dateFromPicker?.input?.value || null;
+    const dateTo = this.dateToPicker?.input?.value || null;
+    if (dateFrom && dateTo) {
+      this.filters.dateFrom = dateFrom;
+      this.filters.dateTo = dateTo;
+    }
 
     this.render();
 
@@ -59,6 +73,35 @@ class JournalView {
         this.render();
       }
     });
+  }
+
+  disableWeekends() {
+    // Calculate earliest trade date
+    const allTrades = state.journal.entries;
+    let minDate = null;
+
+    if (allTrades && allTrades.length > 0) {
+      const datesWithTrades = allTrades
+        .filter(t => t.timestamp)
+        .map(t => new Date(t.timestamp));
+
+      if (datesWithTrades.length > 0) {
+        minDate = new Date(Math.min(...datesWithTrades));
+      }
+    }
+
+    // Initialize flatpickr on filter date inputs with minDate constraint
+    const options = minDate ? { minDate: minDate } : {};
+    this.dateFromPicker = initFlatpickr(this.elements.dateFrom, options);
+    this.dateToPicker = initFlatpickr(this.elements.dateTo, options);
+  }
+
+  formatDate(date) {
+    // Format date as YYYY-MM-DD
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   cacheElements() {
@@ -200,7 +243,8 @@ class JournalView {
     document.addEventListener('click', (e) => {
       if (this.elements.filterPanel?.classList.contains('open')) {
         const isClickInside = this.elements.filterBtn?.contains(e.target) ||
-                             this.elements.filterPanel?.contains(e.target);
+                             this.elements.filterPanel?.contains(e.target) ||
+                             e.target.closest('.flatpickr-calendar');
         if (!isClickInside) {
           this.closeFilterPanel();
         }
@@ -296,41 +340,59 @@ class JournalView {
     // Determine which preset button should be active
     const hasDateFilter = this.filters.dateFrom || this.filters.dateTo;
     if (!hasDateFilter) {
-      // "All time" preset
+      // No dates set - this shouldn't happen with new Max default, but handle it
       this.elements.datePresetBtns?.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.range === 'all');
+        btn.classList.toggle('active', btn.dataset.range === 'max');
       });
-      if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
-      if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
     } else {
-      // Check if it matches a preset
-      const today = new Date().toISOString().split('T')[0];
-      let matchedPreset = false;
+      let matchedPreset = null;
+      const today = getCurrentWeekday();
+      const todayStr = this.formatDate(today);
 
-      this.elements.datePresetBtns?.forEach(btn => {
-        const range = btn.dataset.range;
-        if (range !== 'all') {
-          const fromDate = new Date();
-          fromDate.setDate(fromDate.getDate() - parseInt(range));
-          const expectedFrom = fromDate.toISOString().split('T')[0];
+      // Check if it matches Max preset (earliest trade to today)
+      const allTrades = state.journal.entries;
+      if (allTrades && allTrades.length > 0) {
+        const datesWithTrades = allTrades
+          .filter(t => t.timestamp)
+          .map(t => new Date(t.timestamp));
 
-          if (this.filters.dateFrom === expectedFrom && this.filters.dateTo === today) {
-            btn.classList.add('active');
-            matchedPreset = true;
-            if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
-            if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
-          } else {
-            btn.classList.remove('active');
+        if (datesWithTrades.length > 0) {
+          let earliestDate = new Date(Math.min(...datesWithTrades));
+          const dayOfWeek = earliestDate.getDay();
+          if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
+          else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
+
+          const earliestStr = this.formatDate(earliestDate);
+          if (this.filters.dateFrom === earliestStr && this.filters.dateTo === todayStr) {
+            matchedPreset = 'max';
           }
         }
-      });
-
-      if (!matchedPreset) {
-        // Custom date range - no preset active
-        this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
-        if (this.elements.dateFrom) this.elements.dateFrom.classList.remove('preset-value');
-        if (this.elements.dateTo) this.elements.dateTo.classList.remove('preset-value');
       }
+
+      // Check numeric ranges if Max didn't match
+      if (!matchedPreset) {
+        this.elements.datePresetBtns?.forEach(btn => {
+          const range = btn.dataset.range;
+          if (range !== 'all' && range !== 'max' && range !== 'ytd' && !isNaN(parseInt(range))) {
+            const fromDate = new Date(today);
+            fromDate.setDate(today.getDate() - parseInt(range));
+            const fromDayOfWeek = fromDate.getDay();
+            if (fromDayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
+            else if (fromDayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
+
+            const expectedFrom = this.formatDate(fromDate);
+
+            if (this.filters.dateFrom === expectedFrom && this.filters.dateTo === todayStr) {
+              matchedPreset = range;
+            }
+          }
+        });
+      }
+
+      // Update button active states
+      this.elements.datePresetBtns?.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.range === matchedPreset);
+      });
     }
   }
 
@@ -345,43 +407,116 @@ class JournalView {
     clickedBtn?.classList.add('active');
 
     if (range === 'max') {
-      // Clear date inputs but keep gray styling for empty state
-      if (this.elements.dateFrom) {
-        this.elements.dateFrom.value = '';
-        this.elements.dateFrom.classList.add('preset-value');
+      // Max: from earliest trade to today
+      const today = getCurrentWeekday();
+      const allTrades = state.journal.entries;
+
+      // Find earliest trade date
+      let earliestDate = today;
+      if (allTrades && allTrades.length > 0) {
+        const datesWithTrades = allTrades
+          .filter(t => t.timestamp)
+          .map(t => new Date(t.timestamp));
+
+        if (datesWithTrades.length > 0) {
+          earliestDate = new Date(Math.min(...datesWithTrades));
+          // Adjust to previous weekday if weekend
+          const dayOfWeek = earliestDate.getDay();
+          if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
+          else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
+        }
       }
-      if (this.elements.dateTo) {
-        this.elements.dateTo.value = '';
-        this.elements.dateTo.classList.add('preset-value');
+
+      if (this.dateFromPicker) {
+        this.dateFromPicker.setDate(earliestDate);
+        this.elements.dateFrom?.classList.add('preset-value');
+      }
+      if (this.dateToPicker) {
+        this.dateToPicker.setDate(today);
+        this.elements.dateTo?.classList.add('preset-value');
       }
     } else if (range === 'ytd') {
-      // Year to date - from Jan 1 of current year to today
-      const today = new Date();
-      const fromDate = new Date(today.getFullYear(), 0, 1); // Jan 1 of current year
+      // Year to date - from Jan 1 of current year to today (adjusted to weekday)
+      const today = getCurrentWeekday();
+      const fromDate = new Date(today.getFullYear(), 0, 1);
 
-      // Set date inputs and add preset styling
-      if (this.elements.dateFrom) {
-        this.elements.dateFrom.value = fromDate.toISOString().split('T')[0];
-        this.elements.dateFrom.classList.add('preset-value');
+      // Adjust fromDate to next weekday if it's a weekend
+      const fromDayOfWeek = fromDate.getDay();
+      if (fromDayOfWeek === 0) {
+        fromDate.setDate(fromDate.getDate() + 1);
+      } else if (fromDayOfWeek === 6) {
+        fromDate.setDate(fromDate.getDate() + 2);
       }
-      if (this.elements.dateTo) {
-        this.elements.dateTo.value = today.toISOString().split('T')[0];
-        this.elements.dateTo.classList.add('preset-value');
+
+      // Don't go back before earliest trade
+      const allTrades = state.journal.entries;
+      if (allTrades && allTrades.length > 0) {
+        const datesWithTrades = allTrades
+          .filter(t => t.timestamp)
+          .map(t => new Date(t.timestamp));
+
+        if (datesWithTrades.length > 0) {
+          const earliestDate = new Date(Math.min(...datesWithTrades));
+          if (fromDate < earliestDate) {
+            fromDate.setTime(earliestDate.getTime());
+            // Adjust to previous weekday if weekend
+            const dayOfWeek = fromDate.getDay();
+            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
+            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
+          }
+        }
+      }
+
+      // Set date inputs using flatpickr
+      if (this.dateFromPicker) {
+        this.dateFromPicker.setDate(fromDate);
+        this.elements.dateFrom?.classList.add('preset-value');
+      }
+      if (this.dateToPicker) {
+        this.dateToPicker.setDate(today);
+        this.elements.dateTo?.classList.add('preset-value');
       }
     } else {
       // Calculate date range based on number of days
-      const today = new Date();
-      const fromDate = new Date();
+      const today = getCurrentWeekday();
+      const fromDate = new Date(today);
       fromDate.setDate(today.getDate() - parseInt(range));
 
-      // Set date inputs and add preset styling
-      if (this.elements.dateFrom) {
-        this.elements.dateFrom.value = fromDate.toISOString().split('T')[0];
-        this.elements.dateFrom.classList.add('preset-value');
+      // Adjust fromDate to previous weekday if it's a weekend
+      const fromDayOfWeek = fromDate.getDay();
+      if (fromDayOfWeek === 0) {
+        fromDate.setDate(fromDate.getDate() - 2);
+      } else if (fromDayOfWeek === 6) {
+        fromDate.setDate(fromDate.getDate() - 1);
       }
-      if (this.elements.dateTo) {
-        this.elements.dateTo.value = today.toISOString().split('T')[0];
-        this.elements.dateTo.classList.add('preset-value');
+
+      // Don't go back before earliest trade
+      const allTrades = state.journal.entries;
+      if (allTrades && allTrades.length > 0) {
+        const datesWithTrades = allTrades
+          .filter(t => t.timestamp)
+          .map(t => new Date(t.timestamp));
+
+        if (datesWithTrades.length > 0) {
+          const earliestDate = new Date(Math.min(...datesWithTrades));
+          if (fromDate < earliestDate) {
+            fromDate.setTime(earliestDate.getTime());
+            // Adjust to previous weekday if weekend
+            const dayOfWeek = fromDate.getDay();
+            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
+            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
+          }
+        }
+      }
+
+      // Set date inputs using flatpickr
+      if (this.dateFromPicker) {
+        this.dateFromPicker.setDate(fromDate);
+        this.elements.dateFrom?.classList.add('preset-value');
+      }
+      if (this.dateToPicker) {
+        this.dateToPicker.setDate(today);
+        this.elements.dateTo?.classList.add('preset-value');
       }
     }
   }
@@ -396,13 +531,20 @@ class JournalView {
       .filter(checkbox => checkbox.checked)
       .map(checkbox => checkbox.value);
 
-    // Get date range
-    const dateFrom = this.elements.dateFrom?.value || null;
-    const dateTo = this.elements.dateTo?.value || null;
+    // Get date range from flatpickr instances (not from input.value)
+    const dateFrom = this.dateFromPicker?.input?.value || null;
+    const dateTo = this.dateToPicker?.input?.value || null;
 
     // Validate date range
     if (dateFrom && dateTo && dateFrom > dateTo) {
       showToast('⚠️ Start date cannot be after end date', 'warning');
+      return; // Don't apply filters
+    }
+
+    // Prevent future dates
+    const today = new Date().toISOString().split('T')[0];
+    if ((dateFrom && dateFrom > today) || (dateTo && dateTo > today)) {
+      showToast('⚠️ Cannot select future dates', 'warning');
       return; // Don't apply filters
     }
 
@@ -432,7 +574,7 @@ class JournalView {
       btn.classList.toggle('active', btn.dataset.status === 'all');
     });
 
-    // Check all type checkboxes (changed from unchecking to checking)
+    // Check all type checkboxes
     this.elements.typeCheckboxes?.forEach(checkbox => {
       checkbox.checked = true;
     });
@@ -442,20 +584,8 @@ class JournalView {
       this.elements.allTypesCheckbox.indeterminate = false;
     }
 
-    // Reset date inputs
-    if (this.elements.dateFrom) {
-      this.elements.dateFrom.value = '';
-      this.elements.dateFrom.classList.add('preset-value');
-    }
-    if (this.elements.dateTo) {
-      this.elements.dateTo.value = '';
-      this.elements.dateTo.classList.add('preset-value');
-    }
-
-    // Reset date preset buttons to "All time"
-    this.elements.datePresetBtns?.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.range === 'all');
-    });
+    // Reset date range to "Max" preset
+    this.handleDatePreset('max');
   }
 
   updateFilterCount() {
@@ -1289,11 +1419,9 @@ class JournalView {
       const cachedData = this.getCachedChartData(trade.ticker);
 
       if (cachedData) {
-        console.log(`Using cached chart data for ${trade.ticker}`);
         candles = cachedData;
       } else {
         // Fetch historical candles - 1 year back + 3 months forward
-        console.log(`Fetching fresh chart data for ${trade.ticker}`);
         const entryDate = new Date(trade.timestamp);
         candles = await priceTracker.fetchHistoricalCandles(trade.ticker, entryDate);
 
@@ -1518,7 +1646,6 @@ class JournalView {
     const summarySection = document.querySelector(`[data-company-summary-section="${trade.id}"]`);
 
     if (!summaryContainer) {
-      console.log('Company summary container not found for trade', trade.id);
       return;
     }
 
@@ -1529,17 +1656,13 @@ class JournalView {
 
     // Fetch company summary from API
     try {
-      console.log(`Fetching company summary for ${trade.ticker}...`);
-
       let cleanSummary = '';
 
       // First check if Finnhub description exists in company data
       if (trade.company?.description) {
-        console.log('Using Finnhub description for summary');
         cleanSummary = trade.company.description.trim();
       } else {
         // If no Finnhub description, try Alpha Vantage
-        console.log('No Finnhub description, fetching from Alpha Vantage...');
         const overview = await priceTracker.fetchCompanySummary(trade.ticker);
 
         if (overview && overview.summary) {
@@ -1566,10 +1689,8 @@ class JournalView {
         summaryContainer.textContent = cleanSummary;
         summaryContainer.style.fontStyle = 'normal';
         summaryContainer.style.color = '';
-        console.log(`Successfully fetched and saved company summary for ${trade.ticker}`);
       } else {
         // No description available - show company info we do have
-        console.log(`No company description available for ${trade.ticker}`);
         const companyInfo = [];
         if (trade.company?.name) companyInfo.push(trade.company.name);
         if (trade.company?.industry) companyInfo.push(trade.company.industry);

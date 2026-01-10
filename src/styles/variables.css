@@ -112,7 +112,7 @@
   --z-sticky: 200;
   --z-tooltip: 250;
   --z-modal: 300;
-  --z-toast: 400;
+  --z-toast: 9999;
 }
 
 /* Light theme overrides */

@@ -44,10 +44,10 @@
 
 .header__logo {
   font-family: 'Orbitron', var(--font-display);
-  font-size: var(--text-2xl);
+  font-size: var(--text-lg);
   font-weight: 900;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 60%, #ec4899 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

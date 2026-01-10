@@ -3,7 +3,7 @@
  */
 
 import { state } from '../../core/state.js';
-import { formatCurrency, formatNumber } from '../../core/utils.js';
+import { formatCurrency, formatNumber, disableWeekendsOnDateInput } from '../../core/utils.js';
 import { showToast } from '../ui/ui.js';
 
 class TrimModal {
@@ -18,6 +18,13 @@ class TrimModal {
   init() {
     this.cacheElements();
     this.bindEvents();
+    this.disableWeekends();
+  }
+
+  disableWeekends() {
+    // Disable weekends on date inputs
+    disableWeekendsOnDateInput(this.elements.dateInput);
+    disableWeekendsOnDateInput(this.elements.entryDateInput);
   }
 
   cacheElements() {
