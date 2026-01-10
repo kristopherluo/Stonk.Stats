@@ -171,9 +171,18 @@ class Stats {
     statsSections.forEach(section => {
       const cards = section.querySelectorAll('.stat-card');
       const chart = section.querySelector('.stats-chart');
-      cards.forEach(card => card.classList.remove('stat-card--animate'));
-      if (chart) chart.classList.remove('stats-chart--animate');
+      cards.forEach(card => {
+        card.classList.remove('stat-card--animate');
+        card.style.animationDelay = '';
+      });
+      if (chart) {
+        chart.classList.remove('stats-chart--animate');
+        chart.style.animationDelay = '';
+      }
     });
+
+    // Force a reflow to ensure removal is applied
+    void document.body.offsetHeight;
 
     // Animate row by row after a brief delay
     setTimeout(() => {
