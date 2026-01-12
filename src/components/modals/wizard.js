@@ -44,9 +44,20 @@ class TradeWizard {
 
   disableWeekends() {
     // Initialize trade date with default to current weekday (or last Friday if weekend)
+    const today = getCurrentWeekday();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
     initFlatpickr(this.elements.wizardTradeDate, {
-      defaultDate: getCurrentWeekday()
+      defaultDate: dateString
     });
+
+    // Explicitly set the date to ensure it shows in the visible field
+    if (this.elements.wizardTradeDate?._flatpickr) {
+      this.elements.wizardTradeDate._flatpickr.setDate(dateString, false);
+    }
   }
 
   initNotesEditor() {
@@ -392,13 +403,16 @@ class TradeWizard {
     this.resetForm();
     this.clearAllErrors();
 
-    // Set trade date to today
-    if (this.elements.wizardTradeDate) {
-      const today = new Date();
+    // Set trade date to today using Flatpickr API
+    if (this.elements.wizardTradeDate?._flatpickr) {
+      const today = getCurrentWeekday();
+      // Format date as YYYY-MM-DD string for flatpickr
       const year = today.getFullYear();
       const month = String(today.getMonth() + 1).padStart(2, '0');
       const day = String(today.getDate()).padStart(2, '0');
-      this.elements.wizardTradeDate.value = `${year}-${month}-${day}`;
+      const dateString = `${year}-${month}-${day}`;
+
+      this.elements.wizardTradeDate._flatpickr.setDate(dateString, false);
     }
 
     // Pre-fill from calculator
@@ -780,18 +794,30 @@ class TradeWizard {
 
     // Update setup row
     if (this.thesis.setupType) {
-      this.elements.confirmSetupRow.style.display = 'flex';
-      this.elements.confirmSetup.textContent = this.thesis.setupType.toUpperCase();
+      if (this.elements.confirmSetupRow) {
+        this.elements.confirmSetupRow.style.display = 'flex';
+      }
+      if (this.elements.confirmSetup) {
+        this.elements.confirmSetup.textContent = this.thesis.setupType.toUpperCase();
+      }
     } else {
-      this.elements.confirmSetupRow.style.display = 'none';
+      if (this.elements.confirmSetupRow) {
+        this.elements.confirmSetupRow.style.display = 'none';
+      }
     }
 
     // Update theme row
     if (this.thesis.theme) {
-      this.elements.confirmThemeRow.style.display = 'flex';
-      this.elements.confirmTheme.textContent = this.thesis.theme;
+      if (this.elements.confirmThemeRow) {
+        this.elements.confirmThemeRow.style.display = 'flex';
+      }
+      if (this.elements.confirmTheme) {
+        this.elements.confirmTheme.textContent = this.thesis.theme;
+      }
     } else {
-      this.elements.confirmThemeRow.style.display = 'none';
+      if (this.elements.confirmThemeRow) {
+        this.elements.confirmThemeRow.style.display = 'none';
+      }
     }
   }
 
@@ -832,13 +858,14 @@ class TradeWizard {
 
         companyData = profileData;
       } catch (error) {
-        // If error contains "Invalid ticker", show specific error
-        if (error.message.includes('Invalid ticker')) {
+        // Only block trade if it's definitely an invalid ticker
+        if (error.message.includes('Invalid ticker symbol')) {
           showToast(`❌ ${error.message}`, 'error');
-        } else {
-          showToast(`❌ Failed to validate ticker: ${error.message}`, 'error');
+          return;
         }
-        return;
+
+        // For API errors (rate limits, network issues), log trade anyway
+        showToast('⚠️ Could not validate ticker (API limit), logging trade anyway...', 'warning');
       }
     }
 

@@ -74,31 +74,61 @@ class Stats {
     this.chart = new EquityChart();
     this.chart.init();
 
-    // Listen for journal changes - invalidate equity curve cache
-    state.on('journalEntryAdded', () => {
-      equityCurveManager.invalidateCache();
-      sharedMetrics.recalculateAll();
-      this.refresh();
+    // Listen for journal changes - use SMART invalidation for specific trades
+    state.on('journalEntryAdded', (entry) => {
+      try {
+        equityCurveManager.invalidateForTrade(entry);
+        sharedMetrics.recalculateAll();
+        this.refresh();
+      } catch (error) {
+        console.error('Error in journalEntryAdded handler:', error);
+      }
     });
-    state.on('journalEntryUpdated', () => {
-      equityCurveManager.invalidateCache();
-      sharedMetrics.recalculateAll();
-      this.refresh();
+    state.on('journalEntryUpdated', (entry) => {
+      try {
+        equityCurveManager.invalidateForTrade(entry);
+        sharedMetrics.recalculateAll();
+        this.refresh();
+      } catch (error) {
+        console.error('Error in journalEntryUpdated handler:', error);
+      }
     });
-    state.on('journalEntryDeleted', () => {
-      equityCurveManager.invalidateCache();
-      sharedMetrics.recalculateAll();
-      this.refresh();
+    state.on('journalEntryDeleted', (entry) => {
+      try {
+        equityCurveManager.invalidateForTrade(entry);
+        sharedMetrics.recalculateAll();
+        this.refresh();
+      } catch (error) {
+        console.error('Error in journalEntryDeleted handler:', error);
+      }
     });
     state.on('accountSizeChanged', () => {
+      // Starting balance changed - affects all days
       equityCurveManager.invalidateCache();
       this.refresh();
     });
-    state.on('cashFlowChanged', () => {
-      equityCurveManager.invalidateCache();
-      this.refresh();
+    state.on('cashFlowChanged', (cashFlow) => {
+      try {
+        // Cash flow changed - find earliest transaction and invalidate from there
+        if (cashFlow && cashFlow.transactions && cashFlow.transactions.length > 0) {
+          const dates = cashFlow.transactions.map(tx => new Date(tx.timestamp));
+          const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+
+          const dateStr = this.formatDateLocal(earliestDate);
+          equityCurveManager.invalidateFromDate(dateStr);
+        } else {
+          equityCurveManager.invalidateCache();
+        }
+        this.refresh();
+      } catch (error) {
+        console.error('Error in cashFlowChanged handler:', error);
+        // Fallback to full invalidation
+        equityCurveManager.invalidateCache();
+        this.refresh();
+      }
     });
     state.on('settingsChanged', () => {
+      // Settings changed - affects all days (could be starting balance, etc.)
       equityCurveManager.invalidateCache();
       this.refresh();
     });

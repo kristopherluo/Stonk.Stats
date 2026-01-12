@@ -12,7 +12,7 @@ class EquityCurveManager {
   constructor() {
     this.cache = null;
     this.CACHE_KEY = 'equityCurveCache';
-    this.CACHE_VERSION = 1;
+    this.CACHE_VERSION = 2; // Bumped for smart invalidation support
     this.loadCache();
   }
 
@@ -85,6 +85,7 @@ class EquityCurveManager {
 
   /**
    * Invalidate cache (called when trades or cash flow change)
+   * LEGACY: Full invalidation - use invalidateForTrade() for targeted invalidation
    */
   invalidateCache() {
     this.cache = null;
@@ -93,6 +94,104 @@ class EquityCurveManager {
     } catch (error) {
       console.error('Failed to remove equity curve cache:', error);
     }
+  }
+
+  /**
+   * Smart invalidation: Only invalidate dates affected by a specific trade
+   * @param {Object} trade - The trade that was added/updated/deleted
+   */
+  invalidateForTrade(trade) {
+    if (!this.cache || !this.cache.curve) {
+      // No cache exists, nothing to invalidate
+      return;
+    }
+
+    // Determine affected date range
+    const { startDate, endDate } = this._getAffectedDateRange(trade);
+
+    // Delete cached days in the affected range
+    const affectedDays = [];
+    for (const dateStr in this.cache.curve) {
+      if (dateStr >= startDate && dateStr <= endDate) {
+        delete this.cache.curve[dateStr];
+        affectedDays.push(dateStr);
+      }
+    }
+
+    // Update last calculated date if we deleted the last day
+    const remainingDates = Object.keys(this.cache.curve).sort();
+    if (remainingDates.length > 0) {
+      this.cache.lastCalculatedDate = remainingDates[remainingDates.length - 1];
+    } else {
+      // All days deleted, invalidate entire cache
+      this.invalidateCache();
+      return;
+    }
+
+    // Mark as partially invalidated (skip hash check on next build)
+    this.cache.partiallyInvalidated = true;
+    this.cache.lastUpdated = Date.now();
+
+    this.saveCache();
+  }
+
+  /**
+   * Invalidate all dates from a specific date onwards
+   * Used for cash flow changes that affect all future balances
+   * @param {string} startDateStr - YYYY-MM-DD format
+   */
+  invalidateFromDate(startDateStr) {
+    if (!this.cache || !this.cache.curve) {
+      return;
+    }
+
+    // Delete all days from startDate onwards
+    for (const dateStr in this.cache.curve) {
+      if (dateStr >= startDateStr) {
+        delete this.cache.curve[dateStr];
+      }
+    }
+
+    // Update last calculated date
+    const remainingDates = Object.keys(this.cache.curve).sort();
+    if (remainingDates.length > 0) {
+      this.cache.lastCalculatedDate = remainingDates[remainingDates.length - 1];
+    } else {
+      this.invalidateCache();
+      return;
+    }
+
+    // Mark as partially invalidated (skip hash check on next build)
+    this.cache.partiallyInvalidated = true;
+    this.cache.lastUpdated = Date.now();
+    this.saveCache();
+  }
+
+  /**
+   * Get the date range affected by a trade change
+   * @param {Object} trade - The trade object
+   * @returns {Object} { startDate: 'YYYY-MM-DD', endDate: 'YYYY-MM-DD' }
+   */
+  _getAffectedDateRange(trade) {
+    // Start date: When the trade was entered
+    const entryDate = new Date(trade.timestamp);
+    entryDate.setHours(0, 0, 0, 0);
+    const startDate = this._formatDate(entryDate);
+
+    // End date: When the trade was closed, or today if still open
+    let endDate;
+    if (trade.status === 'closed' && trade.closeDate) {
+      const closeDate = new Date(trade.closeDate);
+      closeDate.setHours(0, 0, 0, 0);
+      endDate = this._formatDate(closeDate);
+    } else {
+      // Still open or trimmed - affects all days through today
+      const today = getCurrentWeekday();
+      today.setHours(0, 0, 0, 0);
+      endDate = this._formatDate(today);
+    }
+
+    return { startDate, endDate };
   }
 
   /**
@@ -248,9 +347,24 @@ class EquityCurveManager {
    * Uses cache if valid, otherwise recalculates
    */
   async buildEquityCurve(filterStartDate = null, filterEndDate = null) {
-    // Check if cache is valid
-    if (this._isCacheValid() && this.cache && this.cache.curve) {
-      // If we have a valid cache, check if we need to append new days
+    // Check if cache exists and has data
+    const hasCacheData = this.cache && this.cache.curve && Object.keys(this.cache.curve).length > 0;
+
+    // If partially invalidated, skip hash check and just fill gaps
+    const useCache = hasCacheData && (this.cache.partiallyInvalidated || this._isCacheValid());
+
+    if (useCache) {
+      // Cache exists - check for gaps and fill them
+      await this._fillCacheGaps();
+
+      // Verify cache still exists after filling gaps
+      if (!this.cache || !this.cache.curve) {
+        // Cache was cleared during gap filling - rebuild from scratch
+        await this._rebuildFullCurve();
+        return this._getFilteredCurve(filterStartDate, filterEndDate);
+      }
+
+      // Check if we need to append new days
       const cacheEndDate = new Date(this.cache.lastCalculatedDate);
       const today = getCurrentWeekday();
       today.setHours(0, 0, 0, 0);
@@ -262,6 +376,13 @@ class EquityCurveManager {
         // Today is already in cache, but prices may have changed
         // Recalculate today's unrealized P&L with current prices
         await this._recalculateTodayUnrealizedPnL();
+      }
+
+      // Clear partial invalidation flag and update hash
+      if (this.cache.partiallyInvalidated) {
+        this.cache.partiallyInvalidated = false;
+        this.cache.dataHash = this._calculateDataHash();
+        this.saveCache();
       }
 
       // Return filtered curve data
@@ -446,6 +567,161 @@ class EquityCurveManager {
       lastUpdated: Date.now(),
       curve: curve
     };
+    this.saveCache();
+  }
+
+  /**
+   * Fill gaps in the cache (missing dates between first and last calculated date)
+   * This is called after partial invalidation to recalculate only affected dates
+   */
+  async _fillCacheGaps() {
+    if (!this.cache || !this.cache.curve) {
+      return;
+    }
+
+    const allEntries = state.journal.entries;
+    if (allEntries.length === 0) {
+      return;
+    }
+
+    // Get all dates that should exist (all weekdays from first entry to last calculated date)
+    const firstEntry = allEntries.reduce((earliest, entry) => {
+      const entryDate = new Date(entry.timestamp);
+      return !earliest || entryDate < earliest ? entryDate : earliest;
+    }, null);
+
+    if (!firstEntry) return;
+
+    const startDate = new Date(firstEntry);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(this.cache.lastCalculatedDate);
+    endDate.setHours(0, 0, 0, 0);
+
+    // Find all missing dates (gaps in the cache)
+    const missingDates = [];
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      const dateStr = this._formatDate(currentDate);
+      const dayOfWeek = currentDate.getDay();
+
+      // Skip weekends
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        if (!this.cache.curve[dateStr]) {
+          missingDates.push(dateStr);
+        }
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+      currentDate.setHours(0, 0, 0, 0);
+    }
+
+    if (missingDates.length === 0) {
+      return;
+    }
+
+    // Get tickers that were active during the missing dates
+    const minMissingDate = missingDates[0];
+    const maxMissingDate = missingDates[missingDates.length - 1];
+    const affectedTickers = new Set();
+
+    allEntries.forEach(trade => {
+      const entryDate = this._formatDate(new Date(trade.timestamp));
+      let exitDate = this._formatDate(getCurrentWeekday());
+
+      if (trade.status === 'closed' && trade.closeDate) {
+        exitDate = this._formatDate(new Date(trade.closeDate));
+      }
+
+      // If trade was active during missing dates, include its ticker
+      if (exitDate >= minMissingDate && entryDate <= maxMissingDate) {
+        affectedTickers.add(trade.ticker);
+      }
+    });
+
+    // Fetch historical prices ONLY for affected tickers
+    if (affectedTickers.size > 0) {
+      const hasApiKey = historicalPricesBatcher.apiKey !== null;
+      if (hasApiKey) {
+        await historicalPricesBatcher.batchFetchPrices(Array.from(affectedTickers));
+      }
+    }
+
+    // Recalculate missing days
+    const startingBalance = state.settings.startingAccountSize;
+    const cashFlowTransactions = (state.cashFlow && state.cashFlow.transactions) || [];
+
+    // Get closed trades
+    const closedTrades = allEntries
+      .filter(e => e.status === 'closed' || e.status === 'trimmed')
+      .map(t => ({
+        date: t.closeDate || t.timestamp,
+        pnl: t.totalRealizedPnL ?? t.pnl ?? 0,
+        ticker: t.ticker,
+        entry: t
+      }));
+
+    // Group by day
+    const tradesByDay = new Map();
+    closedTrades.forEach(trade => {
+      const dateStr = this._formatDate(trade.date);
+      if (!tradesByDay.has(dateStr)) {
+        tradesByDay.set(dateStr, []);
+      }
+      tradesByDay.get(dateStr).push(trade);
+    });
+
+    const cashFlowByDay = new Map();
+    cashFlowTransactions.forEach(transaction => {
+      const dateStr = this._formatDate(transaction.timestamp);
+      if (!cashFlowByDay.has(dateStr)) {
+        cashFlowByDay.set(dateStr, 0);
+      }
+      const amount = transaction.type === 'deposit' ? transaction.amount : -transaction.amount;
+      cashFlowByDay.set(dateStr, cashFlowByDay.get(dateStr) + amount);
+    });
+
+    // Calculate missing days
+    for (const dateStr of missingDates) {
+      // Calculate cumulative values up to this date
+      const allClosedUpToDate = closedTrades.filter(t => {
+        const tradeDate = this._formatDate(t.date);
+        return tradeDate <= dateStr;
+      });
+      const cumulativeRealizedPnL = allClosedUpToDate.reduce((sum, t) => sum + t.pnl, 0);
+
+      const allCashFlowUpToDate = cashFlowTransactions.filter(t => {
+        const txDate = this._formatDate(t.timestamp);
+        return txDate <= dateStr;
+      });
+      const cumulativeCashFlow = allCashFlowUpToDate.reduce((sum, tx) => {
+        const amount = tx.type === 'deposit' ? tx.amount : -tx.amount;
+        return sum + amount;
+      }, 0);
+
+      // Calculate realized balance
+      const realizedBalance = startingBalance + cumulativeRealizedPnL + cumulativeCashFlow;
+
+      // Calculate unrealized P&L
+      const unrealizedPnL = await this._calculateUnrealizedPnLAtDate(dateStr, allEntries);
+
+      // Store in cache
+      this.cache.curve[dateStr] = {
+        balance: realizedBalance + unrealizedPnL,
+        realizedBalance: realizedBalance,
+        unrealizedPnL: unrealizedPnL,
+        dayPnL: tradesByDay.get(dateStr)?.reduce((sum, t) => sum + t.pnl, 0) || 0,
+        cashFlow: cashFlowByDay.get(dateStr) || 0
+      };
+    }
+
+    // Update last calculated date (should be the max of existing dates)
+    const allDates = Object.keys(this.cache.curve).sort();
+    if (allDates.length > 0) {
+      this.cache.lastCalculatedDate = allDates[allDates.length - 1];
+    }
+
     this.saveCache();
   }
 
