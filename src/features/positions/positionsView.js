@@ -293,7 +293,8 @@ class PositionsView {
     if (this.filters.types.length > 0) {
       positions = positions.filter(trade => {
         const tradeType = trade.thesis?.setupType;
-        return tradeType && this.filters.types.includes(tradeType);
+        // Show trades without a type, or trades matching the selected types
+        return !tradeType || this.filters.types.includes(tradeType);
       });
     }
 

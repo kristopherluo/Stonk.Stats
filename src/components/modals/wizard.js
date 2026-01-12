@@ -177,6 +177,9 @@ class TradeWizard {
       skip2Btn: document.getElementById('wizardSkip2'),
       next2Btn: document.getElementById('wizardNext2'),
 
+      // Step 2 - Error elements
+      wizardSetupTypeError: document.getElementById('wizardSetupTypeError'),
+
       // Step 3 - Confirmation
       confirmTicker: document.getElementById('wizardConfirmTicker'),
       confirmPosition: document.getElementById('wizardConfirmPosition'),
@@ -231,7 +234,11 @@ class TradeWizard {
     // Step 2 buttons
     this.elements.cancel2Btn?.addEventListener('click', () => this.close());
     this.elements.back2Btn?.addEventListener('click', () => this.goToStep(1));
-    this.elements.next2Btn?.addEventListener('click', () => this.goToStep(3));
+    this.elements.next2Btn?.addEventListener('click', () => {
+      if (this.validateStep2()) {
+        this.goToStep(3);
+      }
+    });
 
     // Step 3 buttons
     this.elements.cancelBtn?.addEventListener('click', () => this.close());
@@ -244,6 +251,12 @@ class TradeWizard {
         this.elements.setupBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.thesis.setupType = btn.dataset.setup;
+
+        // Clear error when a type is selected
+        if (this.elements.wizardSetupTypeError) {
+          this.elements.wizardSetupTypeError.textContent = '';
+          this.elements.wizardSetupTypeError.classList.remove('input-error--visible');
+        }
       });
     });
 
@@ -599,6 +612,25 @@ class TradeWizard {
     return true;
   }
 
+  validateStep2() {
+    // Clear previous error
+    if (this.elements.wizardSetupTypeError) {
+      this.elements.wizardSetupTypeError.textContent = '';
+      this.elements.wizardSetupTypeError.classList.remove('input-error--visible');
+    }
+
+    // Check if setup type is selected
+    if (!this.thesis.setupType) {
+      this.showInputError(
+        null,
+        this.elements.wizardSetupTypeError,
+        'Please select a setup type'
+      );
+      return false;
+    }
+    return true;
+  }
+
   prefillFromCalculator() {
     const trade = state.trade;
     const results = state.results;
@@ -834,7 +866,18 @@ class TradeWizard {
     const stopPrice = parseFloat(this.elements.wizardStopLoss?.value) || 0;
     const targetPrice = parseFloat(this.elements.wizardTargetPrice?.value) || 0;
     const shares = parseInt(this.elements.wizardShares?.value) || 0;
-    const tradeDate = this.elements.wizardTradeDate?.value || new Date().toISOString().split('T')[0];
+
+    // Get trade date from flatpickr instance if available, otherwise from input value
+    let tradeDate;
+    if (this.elements.wizardTradeDate?._flatpickr && this.elements.wizardTradeDate._flatpickr.selectedDates.length > 0) {
+      const selectedDate = this.elements.wizardTradeDate._flatpickr.selectedDates[0];
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      tradeDate = `${year}-${month}-${day}`;
+    } else {
+      tradeDate = this.elements.wizardTradeDate?.value || new Date().toISOString().split('T')[0];
+    }
 
     // Calculate derived values
     const riskPerShare = entryPrice - stopPrice;
@@ -1178,12 +1221,19 @@ class TradeWizard {
       this.elements.wizardSharesError,
       this.elements.wizardRiskDollarError,
       this.elements.wizardTargetPriceError,
-      this.elements.wizardTradeDateError
+      this.elements.wizardTradeDateError,
+      this.elements.wizardSetupTypeError
     ];
 
     inputs.forEach((input, index) => {
       this.clearInputError(input, errors[index]);
     });
+
+    // Clear setup type error (no input element)
+    if (this.elements.wizardSetupTypeError) {
+      this.elements.wizardSetupTypeError.textContent = '';
+      this.elements.wizardSetupTypeError.classList.remove('input-error--visible');
+    }
 
     // Also clear ticker status icons
     this.hideTickerStatus();
