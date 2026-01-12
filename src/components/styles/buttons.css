@@ -53,21 +53,31 @@
 }
 
 .btn--success {
-  color: white;
-  background: var(--success);
-  border-color: var(--success);
+  color: #4ade80;
+  background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.25) 0%, rgba(74, 222, 128, 0.08) 100%),
+              linear-gradient(145deg, rgba(74, 222, 128, 0.15) 0%, rgba(74, 222, 128, 0.05) 100%);
+  border: 1.5px solid rgba(74, 222, 128, 0.6);
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.8);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.3), inset 0 0 8px rgba(74, 222, 128, 0.15);
 }
 
 .btn--success:hover:not(:disabled) {
-  background: var(--success-hover);
-  border-color: var(--success-hover);
+  background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.35) 0%, rgba(74, 222, 128, 0.12) 100%),
+              linear-gradient(145deg, rgba(74, 222, 128, 0.2) 0%, rgba(74, 222, 128, 0.08) 100%);
+  border-color: rgba(74, 222, 128, 0.9);
+  text-shadow: 0 0 12px rgba(74, 222, 128, 1);
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.5), inset 0 0 12px rgba(74, 222, 128, 0.2);
 }
 
 .btn--success:disabled {
-  opacity: 0.4;
+  color: #4ade80;
+  background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.25) 0%, rgba(74, 222, 128, 0.08) 100%),
+              linear-gradient(145deg, rgba(74, 222, 128, 0.15) 0%, rgba(74, 222, 128, 0.05) 100%);
+  border: 1.5px solid rgba(74, 222, 128, 0.6);
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.8);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.3), inset 0 0 8px rgba(74, 222, 128, 0.15);
   cursor: not-allowed;
-  background: var(--success);
-  border-color: var(--success);
+  opacity: 1;
 }
 
 .btn--secondary {

@@ -247,3 +247,31 @@ export function getCurrentWeekday() {
 
   return today;
 }
+
+/**
+ * Restrict input to numeric values only (with optional decimal support)
+ * @param {HTMLInputElement} inputElement - The input element to restrict
+ * @param {boolean} allowDecimal - Whether to allow decimal points (default: true)
+ */
+export function restrictToNumberInput(inputElement, allowDecimal = true) {
+  if (!inputElement) return;
+
+  inputElement.addEventListener('input', (e) => {
+    let value = e.target.value;
+
+    if (allowDecimal) {
+      // Allow numbers and one decimal point
+      value = value.replace(/[^0-9.]/g, '');
+      // Allow only one decimal point
+      const parts = value.split('.');
+      if (parts.length > 2) {
+        value = parts[0] + '.' + parts.slice(1).join('');
+      }
+    } else {
+      // Allow only integers
+      value = value.replace(/[^0-9]/g, '');
+    }
+
+    e.target.value = value;
+  });
+}

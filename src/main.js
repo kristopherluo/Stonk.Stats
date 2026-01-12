@@ -10,9 +10,6 @@ import { settings } from './features/settings/settings.js';
 import { theme, keyboard, settingsToggle, focusManager, hintArrow, tooltipHandler } from './components/ui/ui.js';
 import { trimModal } from './components/modals/trimModal.js';
 import { wizard } from './components/modals/wizard.js';
-import { confetti } from './components/ui/confetti.js';
-import { achievements } from './components/ui/achievements.js';
-import { soundFx } from './components/ui/soundFx.js';
 import { dataManager } from './core/dataManager.js';
 import { clearDataModal } from './components/modals/clearDataModal.js';
 import { viewManager } from './components/ui/viewManager.js';
@@ -55,15 +52,6 @@ class App {
 
     // Initialize wizard
     wizard.init();
-
-    // Initialize confetti
-    confetti.init();
-
-    // Initialize achievements
-    achievements.init();
-
-    // Initialize sound effects
-    soundFx.init();
 
     // Initialize clear data modal
     clearDataModal.init();

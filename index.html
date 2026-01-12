@@ -820,7 +820,7 @@
           <span class="trim-summary__label">Entry Date</span>
           <span class="trim-summary__value trim-summary__value--display" id="trimEntryDate">-</span>
           <div class="input-wrapper input-wrapper--sm trim-summary__value--edit" id="trimEntryDateEdit" style="display: none;">
-            <input type="date" class="input" id="trimEntryDateInput">
+            <input type="date" class="input input--date" id="trimEntryDateInput">
           </div>
         </div>
         <div class="trim-summary__row">
@@ -846,6 +846,14 @@
         <div class="trim-summary__row">
           <span class="trim-summary__label">Risk Per Share</span>
           <span class="trim-summary__value" id="trimRiskPerShare">$0.00</span>
+        </div>
+        <div class="trim-summary__row">
+          <span class="trim-summary__label">Target</span>
+          <span class="trim-summary__value trim-summary__value--display" id="trimTarget" style="color: var(--warning);">$0.00</span>
+          <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimTargetEdit" style="display: none;">
+            <span class="input-prefix">$</span>
+            <input type="text" class="input input--mono" id="trimTargetInput" placeholder="0.00">
+          </div>
         </div>
         <div class="trim-summary__row trim-summary__row--highlight">
           <span class="trim-summary__label">Remaining Shares</span>
@@ -999,13 +1007,25 @@
         <div class="wizard-step__content">
           <div class="input-group">
             <label class="input-label" for="wizardTicker">Ticker</label>
-            <input
-              type="text"
-              class="input input--mono input--lg"
-              id="wizardTicker"
-              placeholder="AAPL"
-              enterkeyhint="next"
-            >
+            <div class="input-wrapper input-wrapper--with-status">
+              <input
+                type="text"
+                class="input input--mono input--lg"
+                id="wizardTicker"
+                placeholder="AAPL"
+                enterkeyhint="next"
+                tabindex="1"
+              >
+              <div class="input-status" id="wizardTickerStatus">
+                <svg class="input-status__spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+                <svg class="input-status__check" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="input-error" id="wizardTickerError"></div>
           </div>
 
           <div class="input-row">
@@ -1019,12 +1039,14 @@
                   id="wizardEntryPrice"
                   placeholder="0.00"
                   enterkeyhint="next"
+                  tabindex="2"
                 >
                 <div class="input-stepper">
                   <button type="button" class="input-stepper__btn" data-target="wizardEntryPrice" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
                   <button type="button" class="input-stepper__btn" data-target="wizardEntryPrice" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
                 </div>
               </div>
+              <div class="input-error" id="wizardEntryPriceError"></div>
             </div>
             <div class="input-group">
               <label class="input-label" for="wizardStopLoss">
@@ -1042,12 +1064,14 @@
                   id="wizardStopLoss"
                   placeholder="0.00"
                   enterkeyhint="next"
+                  tabindex="3"
                 >
                 <div class="input-stepper">
                   <button type="button" class="input-stepper__btn" data-target="wizardStopLoss" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
                   <button type="button" class="input-stepper__btn" data-target="wizardStopLoss" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
                 </div>
               </div>
+              <div class="input-error" id="wizardStopLossError"></div>
             </div>
           </div>
 
@@ -1059,7 +1083,9 @@
               id="wizardShares"
               placeholder="0"
               enterkeyhint="next"
+              tabindex="4"
             >
+            <div class="input-error" id="wizardSharesError"></div>
           </div>
 
           <div class="input-group">
@@ -1085,9 +1111,11 @@
                 id="wizardRiskDollar"
                 placeholder="0.00"
                 enterkeyhint="next"
+                tabindex="5"
               >
             </div>
             <span class="wizard-risk-percent-display" id="wizardRiskPercentDisplay">(0.8%)</span>
+            <div class="input-error" id="wizardRiskDollarError"></div>
           </div>
 
           <div class="input-group">
@@ -1113,9 +1141,11 @@
                 id="wizardTargetPrice"
                 placeholder="0.00"
                 enterkeyhint="next"
+                tabindex="6"
               >
             </div>
             <span class="wizard-r-display" id="wizardRDisplay">(5R)</span>
+            <div class="input-error" id="wizardTargetPriceError"></div>
           </div>
 
           <div class="input-group">
@@ -1124,7 +1154,9 @@
               type="date"
               class="input input--mono"
               id="wizardTradeDate"
+              tabindex="7"
             >
+            <div class="input-error" id="wizardTradeDateError"></div>
           </div>
         </div>
 
@@ -1220,12 +1252,6 @@
               <span class="wizard-confirmation__value wizard-confirmation__value--notes" id="wizardConfirmNotes">—</span>
             </div>
           </div>
-
-          <!-- Streak Display -->
-          <div class="wizard-streak" id="wizardStreakDisplay" style="display: none;">
-            <span class="wizard-streak__flame">🔥</span>
-            <span class="wizard-streak__text" id="wizardStreakText">3 day streak!</span>
-          </div>
         </div>
 
         <div class="wizard-step__actions">
@@ -1264,21 +1290,10 @@
         </div>
         <div class="clear-data__item clear-data__item--danger">
           <div class="clear-data__details">
-            <span class="clear-data__label">Achievements & Streaks</span>
-            <span class="clear-data__desc" id="clearDataAchievementCount">All unlocked badges and progress</span>
+            <span class="clear-data__label">Settings</span>
+            <span class="clear-data__desc">Account size, risk %, APIs</span>
           </div>
         </div>
-        <div class="clear-data__item clear-data__item--danger">
-          <div class="clear-data__details">
-            <span class="clear-data__label">Account Settings</span>
-            <span class="clear-data__desc">Account size, risk %, preferences</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="clear-data__keep">
-        <span class="clear-data__keep-label">Will be kept:</span>
-        <span class="clear-data__keep-item">🎨 Theme preference</span>
       </div>
     </div>
 
@@ -1287,9 +1302,6 @@
       <button type="button" class="btn btn--danger" id="confirmClearDataBtn">Delete Everything</button>
     </div>
   </div>
-
-  <!-- Confetti Canvas -->
-  <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
 
   <!-- Toast Notifications -->
   <div class="toast-container" id="toastContainer"></div>

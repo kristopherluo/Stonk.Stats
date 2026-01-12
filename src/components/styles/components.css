@@ -1203,6 +1203,88 @@
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3) !important;
 }
 
+/* Inline error message */
+.input-error {
+  display: none;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--border-radius-sm);
+  animation: slideDown 0.2s ease-out;
+}
+
+.input-error::before {
+  content: "⚠ ";
+  margin-right: var(--space-1);
+}
+
+.input-error--visible {
+  display: block;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Input status icons (loading spinner and success check) */
+.input-wrapper--with-status {
+  position: relative;
+  display: block;
+}
+
+.input-status {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  pointer-events: none;
+}
+
+.input-status__spinner,
+.input-status__check {
+  display: none;
+}
+
+.input-status--loading {
+  display: block;
+}
+
+.input-status--loading .input-status__spinner {
+  display: block;
+  color: var(--text-muted);
+  animation: spin 0.8s linear infinite;
+}
+
+.input-status--success {
+  display: block;
+}
+
+.input-status--success .input-status__check {
+  display: block;
+  color: var(--success);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .input--textarea {
   resize: vertical;
   min-height: 60px;

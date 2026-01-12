@@ -3,7 +3,7 @@
  */
 
 import { state } from '../../core/state.js';
-import { parseNumber, formatCurrency, formatWithCommas, initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
+import { parseNumber, formatCurrency, formatWithCommas, initFlatpickr, getCurrentWeekday, restrictToNumberInput } from '../../core/utils.js';
 import { showToast } from '../../components/ui/ui.js';
 import { dataManager } from '../../core/dataManager.js';
 import { clearDataModal } from '../../components/modals/clearDataModal.js';
@@ -23,6 +23,7 @@ class Settings {
     this.cacheElements();
     this.bindEvents();
     this.initializeDatePickers();
+    this.setupNumberRestrictions();
     this.loadAndApply();
 
     // Listen for account changes
@@ -193,7 +194,8 @@ class Settings {
       const saveApiKey = (apiKey) => {
         priceTracker.setApiKey(apiKey);
         if (apiKey) {
-          showToast('✅ Finnhub API key saved - prices will auto-refresh on Positions page', 'success');
+          // Update button to active state
+          this.setApiKeyButtonActive(this.elements.finnhubApiKeyBtn);
         }
       };
 
@@ -212,6 +214,11 @@ class Settings {
           this.elements.finnhubApiKeyBtn.focus();
         }
       });
+
+      // Re-enable button when input changes
+      this.elements.finnhubApiKey.addEventListener('input', () => {
+        this.setApiKeyButtonInactive(this.elements.finnhubApiKeyBtn);
+      });
     }
 
     // Twelve Data API Key
@@ -221,7 +228,8 @@ class Settings {
         historicalPrices.setApiKey(apiKey);
         historicalPricesBatcher.setApiKey(apiKey); // Also set for new batcher
         if (apiKey) {
-          showToast('✅ Twelve Data API key saved - 800 calls/day for charts!', 'success');
+          // Update button to active state
+          this.setApiKeyButtonActive(this.elements.twelveDataApiKeyBtn);
         }
       };
 
@@ -240,6 +248,11 @@ class Settings {
           this.elements.twelveDataApiKeyBtn.focus();
         }
       });
+
+      // Re-enable button when input changes
+      this.elements.twelveDataApiKey.addEventListener('input', () => {
+        this.setApiKeyButtonInactive(this.elements.twelveDataApiKeyBtn);
+      });
     }
 
     // Alpha Vantage API Key
@@ -247,7 +260,8 @@ class Settings {
       const saveAlphaVantageKey = (apiKey) => {
         localStorage.setItem('alphaVantageApiKey', apiKey);
         if (apiKey) {
-          showToast('✅ Alpha Vantage API key saved - 25 calls/day for company descriptions!', 'success');
+          // Update button to active state
+          this.setApiKeyButtonActive(this.elements.alphaVantageApiKeyBtn);
         }
       };
 
@@ -265,6 +279,11 @@ class Settings {
           saveAlphaVantageKey(apiKey);
           this.elements.alphaVantageApiKeyBtn.focus();
         }
+      });
+
+      // Re-enable button when input changes
+      this.elements.alphaVantageApiKey.addEventListener('input', () => {
+        this.setApiKeyButtonInactive(this.elements.alphaVantageApiKeyBtn);
       });
     }
 
@@ -327,6 +346,13 @@ class Settings {
         }
       });
     }
+  }
+
+  setupNumberRestrictions() {
+    // Restrict all $ amount inputs to numbers and decimals only
+    restrictToNumberInput(this.elements.settingsAccountSize, true);
+    restrictToNumberInput(this.elements.depositAmount, true);
+    restrictToNumberInput(this.elements.withdrawAmount, true);
   }
 
   loadAndApply() {
@@ -557,7 +583,8 @@ class Settings {
     }
 
     if (this.elements.cashFlowWithdrawals) {
-      this.elements.cashFlowWithdrawals.textContent = `-${formatCurrency(cashFlow.totalWithdrawals)}`;
+      const withdrawalAmount = Math.abs(cashFlow.totalWithdrawals);
+      this.elements.cashFlowWithdrawals.textContent = `-${formatCurrency(withdrawalAmount)}`;
     }
 
     if (this.elements.cashFlowNet) {
@@ -635,6 +662,24 @@ class Settings {
     const year = date.getFullYear();
 
     return `${month} ${day}, ${year}`;
+  }
+
+  setApiKeyButtonActive(button) {
+    if (!button) return;
+
+    button.textContent = 'Active';
+    button.disabled = true;
+    button.classList.remove('btn--primary');
+    button.classList.add('btn--success');
+  }
+
+  setApiKeyButtonInactive(button) {
+    if (!button) return;
+
+    button.textContent = 'Use Key';
+    button.disabled = false;
+    button.classList.remove('btn--success');
+    button.classList.add('btn--primary');
   }
 }
 

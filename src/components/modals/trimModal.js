@@ -61,7 +61,10 @@ class TrimModal {
       originalStopEdit: document.getElementById('trimOriginalStopEdit'),
       entryDateDisplay: document.getElementById('trimEntryDate'),
       entryDateInput: document.getElementById('trimEntryDateInput'),
-      entryDateEdit: document.getElementById('trimEntryDateEdit')
+      entryDateEdit: document.getElementById('trimEntryDateEdit'),
+      targetDisplay: document.getElementById('trimTarget'),
+      targetInput: document.getElementById('trimTargetInput'),
+      targetEdit: document.getElementById('trimTargetEdit')
     };
 
     // Cache sections for show/hide (done after modal is in DOM)
@@ -220,27 +223,51 @@ class TrimModal {
     if (this.elements.remainingShares) this.elements.remainingShares.textContent = formatNumber(remainingShares);
 
     // Populate entry date display and input
+    let entryDate = null;
     if (trade.timestamp) {
-      const entryDate = new Date(trade.timestamp);
-      const formattedDate = entryDate.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
+      entryDate = new Date(trade.timestamp);
+    } else if (trade.date) {
+      // Fallback to date field if timestamp doesn't exist
+      entryDate = new Date(trade.date);
+    } else {
+      // Last resort: use current date
+      entryDate = new Date();
+    }
 
-      if (this.elements.entryDateDisplay) {
-        this.elements.entryDateDisplay.textContent = formattedDate;
-      }
+    const formattedDate = entryDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
 
-      if (this.elements.entryDateInput) {
-        // Format for date input (YYYY-MM-DD)
-        this.elements.entryDateInput.value = entryDate.toISOString().split('T')[0];
+    if (this.elements.entryDateDisplay) {
+      this.elements.entryDateDisplay.textContent = formattedDate;
+    }
+
+    if (this.elements.entryDateInput) {
+      // Format for date input (YYYY-MM-DD)
+      const dateString = entryDate.toISOString().split('T')[0];
+      this.elements.entryDateInput.value = dateString;
+
+      // If Flatpickr is initialized on this input, update it
+      if (this.elements.entryDateInput._flatpickr) {
+        this.elements.entryDateInput._flatpickr.setDate(dateString, false);
       }
     }
 
     // Populate edit input fields
     if (this.elements.entryPriceInput) this.elements.entryPriceInput.value = trade.entry.toFixed(2);
     if (this.elements.originalStopInput) this.elements.originalStopInput.value = originalStop.toFixed(2);
+
+    // Populate target display and input
+    // Use trade.target if set, otherwise default to 5R (match position card logic)
+    const targetPrice = trade.target || (trade.entry + (riskPerShare * 5));
+    if (this.elements.targetDisplay) {
+      this.elements.targetDisplay.textContent = formatCurrency(targetPrice);
+    }
+    if (this.elements.targetInput) {
+      this.elements.targetInput.value = targetPrice.toFixed(2);
+    }
 
     // Clear new stop input
     if (this.elements.newStop) this.elements.newStop.value = '';
@@ -554,10 +581,11 @@ class TrimModal {
 
     // Check if "Edit position details" mode is active
     if (this.isEditMode) {
-      // Edit position details mode - update entry and original stop
+      // Edit position details mode - update entry, original stop, and target
       const newEntry = parseFloat(this.elements.entryPriceInput?.value);
       const newOriginalStop = parseFloat(this.elements.originalStopInput?.value);
       const newEntryDate = this.elements.entryDateInput?.value;
+      const newTarget = parseFloat(this.elements.targetInput?.value);
 
       if (isNaN(newEntry) || newEntry <= 0) {
         showToast('Please enter a valid entry price', 'error');
@@ -574,6 +602,12 @@ class TrimModal {
         return;
       }
 
+      // Target is optional, but if provided must be valid
+      if (this.elements.targetInput?.value && (isNaN(newTarget) || newTarget <= 0)) {
+        showToast('Please enter a valid target price', 'error');
+        return;
+      }
+
       const oldEntry = this.currentTrade.entry;
       const oldOriginalStop = this.currentTrade.originalStop ?? this.currentTrade.stop;
 
@@ -583,6 +617,11 @@ class TrimModal {
         originalStop: newOriginalStop,
         timestamp: new Date(newEntryDate + 'T12:00:00').toISOString()
       };
+
+      // Add target if provided
+      if (!isNaN(newTarget) && newTarget > 0) {
+        updates.target = newTarget;
+      }
 
       // If there's existing trim history, recalculate P&L for each trim
       if (this.currentTrade.trimHistory && this.currentTrade.trimHistory.length > 0) {

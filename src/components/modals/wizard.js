@@ -4,7 +4,7 @@
 
 import { state } from '../../core/state.js';
 import { showToast } from '../ui/ui.js';
-import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput, initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
+import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput, initFlatpickr, getCurrentWeekday, restrictToNumberInput } from '../../core/utils.js';
 import { priceTracker } from '../../core/priceTracker.js';
 
 class TradeWizard {
@@ -28,8 +28,18 @@ class TradeWizard {
   init() {
     this.cacheElements();
     this.bindEvents();
+    this.setupNumberRestrictions();
     this.initNotesEditor();
     this.disableWeekends();
+  }
+
+  setupNumberRestrictions() {
+    // Restrict numeric inputs to numbers and decimals only
+    restrictToNumberInput(this.elements.wizardEntryPrice, true);
+    restrictToNumberInput(this.elements.wizardStopLoss, true);
+    restrictToNumberInput(this.elements.wizardShares, false); // Integer only
+    restrictToNumberInput(this.elements.wizardRiskDollar, true);
+    restrictToNumberInput(this.elements.wizardTargetPrice, true);
   }
 
   disableWeekends() {
@@ -121,6 +131,7 @@ class TradeWizard {
 
       // Step 1 - Trade Details
       wizardTicker: document.getElementById('wizardTicker'),
+      wizardTickerStatus: document.getElementById('wizardTickerStatus'),
       wizardEntryPrice: document.getElementById('wizardEntryPrice'),
       wizardStopLoss: document.getElementById('wizardStopLoss'),
       wizardShares: document.getElementById('wizardShares'),
@@ -135,6 +146,15 @@ class TradeWizard {
       wizardTradeDate: document.getElementById('wizardTradeDate'),
       cancel1Btn: document.getElementById('wizardCancel1'),
       next1Btn: document.getElementById('wizardNext1'),
+
+      // Step 1 - Error elements
+      wizardTickerError: document.getElementById('wizardTickerError'),
+      wizardEntryPriceError: document.getElementById('wizardEntryPriceError'),
+      wizardStopLossError: document.getElementById('wizardStopLossError'),
+      wizardSharesError: document.getElementById('wizardSharesError'),
+      wizardRiskDollarError: document.getElementById('wizardRiskDollarError'),
+      wizardTargetPriceError: document.getElementById('wizardTargetPriceError'),
+      wizardTradeDateError: document.getElementById('wizardTradeDateError'),
 
       // Step 2 - Thesis
       setupBtns: document.querySelectorAll('[data-setup]'),
@@ -156,14 +176,9 @@ class TradeWizard {
       confirmSetup: document.getElementById('wizardConfirmSetup'),
       confirmThemeRow: document.getElementById('wizardConfirmThemeRow'),
       confirmTheme: document.getElementById('wizardConfirmTheme'),
-      streakDisplay: document.getElementById('wizardStreakDisplay'),
-      streakText: document.getElementById('wizardStreakText'),
       cancelBtn: document.getElementById('wizardCancel'),
       back3Btn: document.getElementById('wizardBack3'),
-      confirmBtn: document.getElementById('wizardConfirmBtn'),
-
-      // Confetti
-      confettiCanvas: document.getElementById('confettiCanvas')
+      confirmBtn: document.getElementById('wizardConfirmBtn')
     };
   }
 
@@ -238,6 +253,11 @@ class TradeWizard {
       this.elements.wizardTicker.value = ticker; // Force uppercase
       // Update state so it persists
       state.updateTrade({ ticker });
+    });
+
+    // Ticker blur - validate ticker when user leaves the field
+    this.elements.wizardTicker?.addEventListener('blur', async () => {
+      await this.validateTickerOnBlur();
     });
 
     // Entry, stop, shares, target inputs - update state as user types
@@ -325,6 +345,30 @@ class TradeWizard {
     this.elements.wizardRiskDollar?.addEventListener('input', () => {
       this.handleCustomRiskDollar();
     });
+
+    // Clear errors on input
+    this.elements.wizardTicker?.addEventListener('input', () => {
+      this.clearInputError(this.elements.wizardTicker, this.elements.wizardTickerError);
+      this.hideTickerStatus(); // Also hide validation status icons
+    });
+    this.elements.wizardEntryPrice?.addEventListener('input', () => {
+      this.clearInputError(this.elements.wizardEntryPrice, this.elements.wizardEntryPriceError);
+    });
+    this.elements.wizardStopLoss?.addEventListener('input', () => {
+      this.clearInputError(this.elements.wizardStopLoss, this.elements.wizardStopLossError);
+    });
+    this.elements.wizardShares?.addEventListener('input', () => {
+      this.clearInputError(this.elements.wizardShares, this.elements.wizardSharesError);
+    });
+    this.elements.wizardRiskDollar?.addEventListener('input', () => {
+      this.clearInputError(this.elements.wizardRiskDollar, this.elements.wizardRiskDollarError);
+    });
+    this.elements.wizardTargetPrice?.addEventListener('input', () => {
+      this.clearInputError(this.elements.wizardTargetPrice, this.elements.wizardTargetPriceError);
+    });
+    this.elements.wizardTradeDate?.addEventListener('change', () => {
+      this.clearInputError(this.elements.wizardTradeDate, this.elements.wizardTradeDateError);
+    });
   }
 
   isOpen() {
@@ -346,6 +390,7 @@ class TradeWizard {
 
     // Reset UI
     this.resetForm();
+    this.clearAllErrors();
 
     // Set trade date to today
     if (this.elements.wizardTradeDate) {
@@ -422,6 +467,9 @@ class TradeWizard {
   }
 
   async validateStep1() {
+    // Clear all previous errors
+    this.clearAllErrors();
+
     // Get all field values
     const ticker = this.elements.wizardTicker?.value.trim() || '';
     const entryPrice = parseFloat(this.elements.wizardEntryPrice?.value);
@@ -432,67 +480,104 @@ class TradeWizard {
 
     // Validate ticker (required)
     if (!ticker) {
-      showToast('Ticker is required', 'error');
-      this.elements.wizardTicker?.focus();
+      this.showInputError(
+        this.elements.wizardTicker,
+        this.elements.wizardTickerError,
+        'Ticker is required'
+      );
       return false;
     }
 
     // Validate ticker with API if available
     if (priceTracker.apiKey) {
       try {
-        showToast('🔍 Validating ticker...', 'info');
         await priceTracker.fetchPrice(ticker);
       } catch (error) {
-        if (error.message.includes('Invalid ticker')) {
-          showToast(`❌ Invalid ticker: ${ticker}`, 'error');
-        } else {
-          showToast(`❌ Failed to validate ticker: ${error.message}`, 'error');
-        }
-        this.elements.wizardTicker?.focus();
+        const errorMsg = error.message.includes('Invalid ticker')
+          ? `Invalid ticker: ${ticker}`
+          : `Failed to validate ticker: ${error.message}`;
+        this.showInputError(
+          this.elements.wizardTicker,
+          this.elements.wizardTickerError,
+          errorMsg
+        );
         return false;
       }
     }
 
     // Validate entry price (required)
     if (!entryPrice || isNaN(entryPrice) || entryPrice <= 0) {
-      showToast('Entry price must be a valid number greater than 0', 'error');
-      this.elements.wizardEntryPrice?.focus();
+      this.showInputError(
+        this.elements.wizardEntryPrice,
+        this.elements.wizardEntryPriceError,
+        'Entry price must be a valid number greater than 0'
+      );
       return false;
     }
 
     // Validate stop loss (required)
     if (!stopPrice || isNaN(stopPrice) || stopPrice <= 0) {
-      showToast('Stop loss must be a valid number greater than 0', 'error');
-      this.elements.wizardStopLoss?.focus();
+      this.showInputError(
+        this.elements.wizardStopLoss,
+        this.elements.wizardStopLossError,
+        'Stop loss must be a valid number greater than 0'
+      );
       return false;
     }
 
     // Validate shares (required)
     if (!shares || isNaN(shares) || shares <= 0) {
-      showToast('Shares must be a valid number greater than 0', 'error');
-      this.elements.wizardShares?.focus();
+      this.showInputError(
+        this.elements.wizardShares,
+        this.elements.wizardSharesError,
+        'Shares must be a valid number greater than 0'
+      );
       return false;
+    }
+
+    // Validate risk dollar if provided
+    const riskDollar = this.elements.wizardRiskDollar?.value.trim();
+    if (riskDollar && riskDollar.length > 0) {
+      const risk = parseFloat(riskDollar);
+      if (isNaN(risk) || risk <= 0) {
+        this.showInputError(
+          this.elements.wizardRiskDollar,
+          this.elements.wizardRiskDollarError,
+          'Risk must be a valid number greater than 0'
+        );
+        return false;
+      }
     }
 
     // Validate target price if provided
     if (targetPrice && targetPrice.length > 0) {
       const target = parseFloat(targetPrice);
       if (isNaN(target) || target <= 0) {
-        showToast('Target price must be a valid number greater than 0', 'error');
-        this.elements.wizardTargetPrice?.focus();
+        this.showInputError(
+          this.elements.wizardTargetPrice,
+          this.elements.wizardTargetPriceError,
+          'Target price must be a valid number greater than 0'
+        );
         return false;
       }
       // Ensure target is greater than entry
       if (target <= entryPrice) {
-        showToast('Target price must be greater than entry price', 'error');
-        this.elements.wizardTargetPrice?.focus();
+        this.showInputError(
+          this.elements.wizardTargetPrice,
+          this.elements.wizardTargetPriceError,
+          'Target price must be greater than entry price'
+        );
         return false;
       }
     }
 
     // Validate date (required)
     if (!tradeDate) {
-      showToast('Trade date is required', 'error');
+      this.showInputError(
+        this.elements.wizardTradeDate,
+        this.elements.wizardTradeDateError,
+        'Trade date is required'
+      );
       this.elements.wizardTradeDate?.focus();
       return false;
     }
@@ -566,13 +651,12 @@ class TradeWizard {
     this.updateRiskDisplay();
     this.updateTargetRDisplay();
 
-    // Auto-select 5R if buttons are enabled
+    // Auto-select 5R if buttons are enabled (only need entry and stop)
     if (this.elements.wizardRMultipleBtns && this.elements.wizardRMultipleBtns.length > 0) {
       const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
       const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
-      const shares = parseInt(this.elements.wizardShares?.value) || 0;
 
-      if (entry > 0 && stop > 0 && shares > 0 && entry !== stop) {
+      if (entry > 0 && stop > 0 && entry !== stop) {
         // Auto-select 5R button
         const fiveRBtn = Array.from(this.elements.wizardRMultipleBtns).find(btn => btn.dataset.r === '5');
         if (fiveRBtn) {
@@ -709,23 +793,6 @@ class TradeWizard {
     } else {
       this.elements.confirmThemeRow.style.display = 'none';
     }
-
-    // Show streak preview
-    const progress = state.journalMeta.achievements.progress;
-    const today = new Date().toDateString();
-    const lastDate = progress.lastTradeDate ? new Date(progress.lastTradeDate).toDateString() : null;
-
-    if (lastDate !== today && progress.currentStreak > 0) {
-      // Will extend streak
-      this.elements.streakDisplay.style.display = 'flex';
-      this.elements.streakText.textContent = `${progress.currentStreak + 1} day streak!`;
-    } else if (!lastDate) {
-      // First trade ever
-      this.elements.streakDisplay.style.display = 'flex';
-      this.elements.streakText.textContent = 'Start your streak!';
-    } else {
-      this.elements.streakDisplay.style.display = 'none';
-    }
   }
 
   async confirmTrade() {
@@ -807,40 +874,11 @@ class TradeWizard {
     // Add to journal
     const newEntry = state.addJournalEntry(journalEntry);
 
-    // Update progress
-    const progress = state.journalMeta.achievements.progress;
-    progress.totalTrades++;
-
-    if (this.notes) {
-      progress.tradesWithNotes++;
-    }
-    if (this.hasThesisData()) {
-      progress.tradesWithThesis++;
-    }
-    if (wizardComplete && this.skippedSteps.length === 0) {
-      progress.completeWizardCount++;
-    }
-
-    // Update streak
-    state.updateStreak();
-
-    // Save progress
+    // Save changes
     state.saveJournalMeta();
-
-    // Trigger events for achievements/celebrations
-    state.emit('tradeLogged', {
-      entry: newEntry,
-      wizardComplete,
-      thesis: this.thesis
-    });
 
     // Show success toast
     this.showSuccessToast();
-
-    // Trigger confetti if celebrations enabled
-    if (state.journalMeta.settings.celebrationsEnabled) {
-      state.emit('triggerConfetti');
-    }
   }
 
   hasThesisData() {
@@ -854,9 +892,9 @@ class TradeWizard {
 
     const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
     const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
-    const shares = parseInt(this.elements.wizardShares?.value) || 0;
 
-    const canCalculate = entry > 0 && stop > 0 && shares > 0 && entry !== stop;
+    // Only need entry and stop to calculate target price (R-Multiple)
+    const canCalculate = entry > 0 && stop > 0 && entry !== stop;
 
     this.elements.wizardRMultipleBtns.forEach(btn => {
       btn.disabled = !canCalculate;
@@ -1061,6 +1099,125 @@ class TradeWizard {
     ];
     const message = messages[Math.floor(Math.random() * messages.length)];
     showToast(message, 'success');
+  }
+
+  showInputError(inputElement, errorElement, message) {
+    // Add error class to input
+    if (inputElement) {
+      inputElement.classList.add('input--error');
+    }
+
+    // Show error message
+    if (errorElement) {
+      errorElement.textContent = message;
+      errorElement.classList.add('input-error--visible');
+    }
+
+    // Focus the input
+    if (inputElement) {
+      inputElement.focus();
+    }
+  }
+
+  clearInputError(inputElement, errorElement) {
+    // Remove error class from input
+    if (inputElement) {
+      inputElement.classList.remove('input--error');
+    }
+
+    // Hide error message
+    if (errorElement) {
+      errorElement.classList.remove('input-error--visible');
+      errorElement.textContent = '';
+    }
+  }
+
+  clearAllErrors() {
+    // Clear all input error states
+    const inputs = [
+      this.elements.wizardTicker,
+      this.elements.wizardEntryPrice,
+      this.elements.wizardStopLoss,
+      this.elements.wizardShares,
+      this.elements.wizardRiskDollar,
+      this.elements.wizardTargetPrice,
+      this.elements.wizardTradeDate
+    ];
+
+    const errors = [
+      this.elements.wizardTickerError,
+      this.elements.wizardEntryPriceError,
+      this.elements.wizardStopLossError,
+      this.elements.wizardSharesError,
+      this.elements.wizardRiskDollarError,
+      this.elements.wizardTargetPriceError,
+      this.elements.wizardTradeDateError
+    ];
+
+    inputs.forEach((input, index) => {
+      this.clearInputError(input, errors[index]);
+    });
+
+    // Also clear ticker status icons
+    this.hideTickerStatus();
+  }
+
+  showTickerLoading() {
+    if (!this.elements.wizardTickerStatus) return;
+    this.elements.wizardTickerStatus.className = 'input-status input-status--loading';
+  }
+
+  showTickerSuccess() {
+    if (!this.elements.wizardTickerStatus) return;
+    this.elements.wizardTickerStatus.className = 'input-status input-status--success';
+  }
+
+  hideTickerStatus() {
+    if (!this.elements.wizardTickerStatus) return;
+    this.elements.wizardTickerStatus.className = 'input-status';
+  }
+
+  async validateTickerOnBlur() {
+    const ticker = this.elements.wizardTicker?.value.trim() || '';
+
+    // Don't validate if ticker is empty
+    if (!ticker) {
+      this.hideTickerStatus();
+      return;
+    }
+
+    // Don't validate if no API key is available
+    if (!priceTracker.apiKey) {
+      this.hideTickerStatus();
+      return;
+    }
+
+    // Clear any existing errors
+    this.clearInputError(this.elements.wizardTicker, this.elements.wizardTickerError);
+
+    // Show loading spinner
+    this.showTickerLoading();
+
+    try {
+      // Validate ticker with API
+      await priceTracker.fetchPrice(ticker);
+
+      // Show success check
+      this.showTickerSuccess();
+    } catch (error) {
+      // Hide status icons
+      this.hideTickerStatus();
+
+      // Show error message
+      const errorMsg = error.message.includes('Invalid ticker')
+        ? `Invalid ticker: ${ticker}`
+        : `Failed to validate ticker: ${error.message}`;
+      this.showInputError(
+        this.elements.wizardTicker,
+        this.elements.wizardTickerError,
+        errorMsg
+      );
+    }
   }
 }
 
