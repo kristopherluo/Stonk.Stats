@@ -1056,47 +1056,70 @@ class JournalView {
       });
     });
 
-    // Interactive conviction stars
-    this.elements.tableBody.querySelectorAll('.conviction-stars').forEach(starsContainer => {
-      const tradeId = parseInt(starsContainer.dataset.tradeId);
-      const stars = starsContainer.querySelectorAll('.conviction-star');
+    // PERFORMANCE FIX: Use event delegation for star interactions
+    // Prevents 500+ individual event listeners for star hovers and clicks
 
-      // Hover preview
-      stars.forEach((star, index) => {
-        star.addEventListener('mouseenter', () => {
+    // Delegated mouseenter for hover preview
+    if (this._starHoverHandler) {
+      this.elements.tableBody.removeEventListener('mouseenter', this._starHoverHandler, true);
+    }
+    this._starHoverHandler = (e) => {
+      const star = e.target.closest('.conviction-star');
+      if (!star) return;
+
+      const container = star.closest('.conviction-stars');
+      const stars = container.querySelectorAll('.conviction-star');
+      const index = Array.from(stars).indexOf(star);
+
+      stars.forEach((s, i) => {
+        s.classList.toggle('hover-preview', i <= index);
+      });
+    };
+    this.elements.tableBody.addEventListener('mouseenter', this._starHoverHandler, true);
+
+    // Delegated mouseleave to reset hover
+    if (this._starLeaveHandler) {
+      this.elements.tableBody.removeEventListener('mouseleave', this._starLeaveHandler, true);
+    }
+    this._starLeaveHandler = (e) => {
+      const container = e.target.closest('.conviction-stars');
+      if (!container) return;
+
+      const stars = container.querySelectorAll('.conviction-star');
+      stars.forEach(s => s.classList.remove('hover-preview'));
+    };
+    this.elements.tableBody.addEventListener('mouseleave', this._starLeaveHandler, true);
+
+    // Delegated click for conviction stars
+    if (this._starClickHandler) {
+      this.elements.tableBody.removeEventListener('click', this._starClickHandler);
+    }
+    this._starClickHandler = (e) => {
+      const star = e.target.closest('.conviction-star');
+      if (!star) return;
+
+      const container = star.closest('.conviction-stars');
+      const tradeId = parseInt(container.dataset.tradeId);
+      const stars = container.querySelectorAll('.conviction-star');
+      const index = Array.from(stars).indexOf(star);
+      const newConviction = index + 1;
+      const trade = state.journal.entries.find(t => t.id === tradeId);
+
+      if (trade && trade.thesis && trade.thesis.conviction !== newConviction) {
+        // Update silently without triggering re-render
+        const tradeIndex = state.journal.entries.findIndex(t => t.id === tradeId);
+        if (tradeIndex !== -1) {
+          state.journal.entries[tradeIndex].thesis.conviction = newConviction;
+          state.saveJournal();
+
+          // Update the UI directly
           stars.forEach((s, i) => {
-            s.classList.toggle('hover-preview', i <= index);
+            s.classList.toggle('active', i < newConviction);
           });
-        });
-      });
-
-      // Reset on mouse leave
-      starsContainer.addEventListener('mouseleave', () => {
-        stars.forEach(s => s.classList.remove('hover-preview'));
-      });
-
-      // Click to update conviction
-      stars.forEach((star, index) => {
-        star.addEventListener('click', () => {
-          const newConviction = index + 1;
-          const trade = state.journal.entries.find(t => t.id === tradeId);
-
-          if (trade && trade.thesis && trade.thesis.conviction !== newConviction) {
-            // Update silently without triggering re-render
-            const tradeIndex = state.journal.entries.findIndex(t => t.id === tradeId);
-            if (tradeIndex !== -1) {
-              state.journal.entries[tradeIndex].thesis.conviction = newConviction;
-              state.saveJournal();
-
-              // Update the UI directly
-              stars.forEach((s, i) => {
-                s.classList.toggle('active', i < newConviction);
-              });
-            }
-          }
-        });
-      });
-    });
+        }
+      }
+    };
+    this.elements.tableBody.addEventListener('click', this._starClickHandler);
   }
 
   toggleRowExpand(id) {
