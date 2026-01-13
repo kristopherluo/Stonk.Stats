@@ -2,6 +2,8 @@
  * State Management - Centralized app state with event system
  */
 
+import { debounce } from './utils.js';
+
 class AppState {
   constructor() {
     this.state = {
@@ -90,6 +92,12 @@ class AppState {
     };
 
     this.listeners = new Map();
+
+    // Create debounced save methods to prevent localStorage blocking on every mutation
+    // 300ms delay allows multiple rapid changes to be batched into single save
+    this._debouncedSaveJournal = debounce(() => this._saveJournalImmediate(), 300);
+    this._debouncedSaveCashFlow = debounce(() => this._saveCashFlowImmediate(), 300);
+    this._debouncedSaveJournalMeta = debounce(() => this._saveJournalMetaImmediate(), 300);
   }
 
   // Event system
@@ -278,7 +286,13 @@ class AppState {
     }
   }
 
+  // Public method: uses debouncing to batch saves
   saveJournal() {
+    this._debouncedSaveJournal();
+  }
+
+  // Private method: immediate save (called by debounced function)
+  _saveJournalImmediate() {
     try {
       localStorage.setItem('riskCalcJournal', JSON.stringify(this.state.journal.entries));
     } catch (e) {
@@ -308,7 +322,13 @@ class AppState {
     }
   }
 
+  // Public method: uses debouncing to batch saves
   saveCashFlow() {
+    this._debouncedSaveCashFlow();
+  }
+
+  // Private method: immediate save (called by debounced function)
+  _saveCashFlowImmediate() {
     try {
       localStorage.setItem('riskCalcCashFlow', JSON.stringify(this.state.cashFlow));
     } catch (e) {
@@ -444,7 +464,13 @@ class AppState {
   }
 
   // JournalMeta persistence
+  // Public method: uses debouncing to batch saves
   saveJournalMeta() {
+    this._debouncedSaveJournalMeta();
+  }
+
+  // Private method: immediate save (called by debounced function)
+  _saveJournalMetaImmediate() {
     try {
       localStorage.setItem('riskCalcJournalMeta', JSON.stringify(this.state.journalMeta));
     } catch (e) {
