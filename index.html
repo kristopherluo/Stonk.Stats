@@ -813,7 +813,7 @@
       <!-- Trade Summary -->
       <div class="trim-summary" style="padding-top: 8px; padding-bottom: 40px;">
         <button class="btn btn--sm btn--ghost" id="editPositionDetailsBtn" style="position: absolute; bottom: var(--space-3); right: var(--space-3); padding-left: var(--space-2); padding-right: var(--space-2);">
-          Edit trade details
+          Edit position details
         </button>
 
         <div class="trim-summary__row">
@@ -823,21 +823,23 @@
             <input type="date" class="input input--date" id="trimEntryDateInput">
           </div>
         </div>
-        <div class="trim-summary__row">
+        <div class="trim-summary__row" style="flex-wrap: wrap;">
           <span class="trim-summary__label">Entry Price</span>
           <span class="trim-summary__value trim-summary__value--display" id="trimEntryPrice">$0.00</span>
           <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimEntryPriceEdit" style="display: none;">
             <span class="input-prefix">$</span>
             <input type="text" class="input input--mono" id="trimEntryPriceInput" placeholder="0.00">
           </div>
+          <div class="input-error" id="trimEntryPriceError" style="width: 100%; margin-left: auto;"></div>
         </div>
-        <div class="trim-summary__row">
+        <div class="trim-summary__row" style="flex-wrap: wrap;">
           <span class="trim-summary__label">Original Stop</span>
           <span class="trim-summary__value trim-summary__value--display" id="trimOriginalStop">$0.00</span>
           <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimOriginalStopEdit" style="display: none;">
             <span class="input-prefix">$</span>
             <input type="text" class="input input--mono" id="trimOriginalStopInput" placeholder="0.00">
           </div>
+          <div class="input-error" id="trimOriginalStopError" style="width: 100%; margin-left: auto;"></div>
         </div>
         <div class="trim-summary__row">
           <span class="trim-summary__label">Current Stop</span>
@@ -847,13 +849,14 @@
           <span class="trim-summary__label">Risk Per Share</span>
           <span class="trim-summary__value" id="trimRiskPerShare">$0.00</span>
         </div>
-        <div class="trim-summary__row">
+        <div class="trim-summary__row" style="flex-wrap: wrap;">
           <span class="trim-summary__label">Target</span>
           <span class="trim-summary__value trim-summary__value--display" id="trimTarget" style="color: var(--warning);">$0.00</span>
           <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimTargetEdit" style="display: none;">
             <span class="input-prefix">$</span>
             <input type="text" class="input input--mono" id="trimTargetInput" placeholder="0.00">
           </div>
+          <div class="input-error" id="trimTargetError" style="width: 100%; margin-left: auto;"></div>
         </div>
         <div class="trim-summary__row trim-summary__row--highlight">
           <span class="trim-summary__label">Remaining Shares</span>
@@ -873,20 +876,23 @@
         </div>
 
         <!-- Exit Price -->
-        <div class="input-group input-group--inline" style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 200px;">
-            <label class="input-label" for="trimExitPrice" style="margin: 0;">Exit Price</label>
-            <div class="input-wrapper input-wrapper--prefix input-wrapper--sm">
-              <span class="input-prefix">$</span>
-              <input type="text" class="input input--mono" id="trimExitPrice" placeholder="0.00">
+        <div class="input-group input-group--inline" style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 200px;">
+              <label class="input-label" for="trimExitPrice" style="margin: 0;">Exit Price</label>
+              <div class="input-wrapper input-wrapper--prefix input-wrapper--sm">
+                <span class="input-prefix">$</span>
+                <input type="text" class="input input--mono" id="trimExitPrice" placeholder="0.00">
+              </div>
+              <span class="trim-r-display" id="trimRDisplay">(5R)</span>
             </div>
-            <span class="trim-r-display" id="trimRDisplay">(5R)</span>
+            <label class="checkbox-label" style="margin: 0;">
+              <input type="checkbox" id="onlyChangeTargetCheckbox">
+              <span class="checkbox-box"></span>
+              <span class="checkbox-text">Only change target</span>
+            </label>
           </div>
-          <label class="checkbox-label" style="margin: 0;">
-            <input type="checkbox" id="onlyChangeTargetCheckbox">
-            <span class="checkbox-box"></span>
-            <span class="checkbox-text">Only change target</span>
-          </label>
+          <div class="input-error" id="trimExitPriceError" style="align-self: stretch;"></div>
         </div>
       </div>
 
@@ -901,20 +907,16 @@
           <button type="button" class="preset-btn active" data-trim="100">All</button>
         </div>
 
-        <!-- Custom trim percentage -->
-        <div class="preset-custom">
-          <span class="preset-custom__label">Custom</span>
-          <div class="input-wrapper input-wrapper--suffix input-wrapper--compact">
-            <input type="text" class="input input--mono" id="customTrimPercent" placeholder="">
-            <span class="input-suffix">%</span>
+        <!-- Shares Input -->
+        <div style="display: flex; flex-direction: column; gap: 0.25rem; margin-top: var(--space-3);">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <label class="input-label" for="trimSharesInput" style="margin: 0;">Shares</label>
+            <div class="input-wrapper input-wrapper--sm" style="width: 7ch;">
+              <input type="text" class="input input--mono" id="trimSharesInput" placeholder="0">
+            </div>
+            <span class="trim-r-display" id="trimPercentDisplay">(100%)</span>
           </div>
-        </div>
-
-        <!-- Shares to close -->
-        <div class="trim-shares-display">
-          <span class="trim-shares-display__label">Closing</span>
-          <span class="trim-shares-display__value" id="trimSharesClosing">0 shares</span>
-          <span class="trim-shares-display__remaining" id="trimSharesRemaining">(0 remaining)</span>
+          <div class="input-error" id="trimSharesError"></div>
         </div>
       </div>
 
@@ -928,22 +930,25 @@
 
       <!-- Update Stop Loss (optional) -->
       <div class="trim-section">
-        <div class="input-group input-group--inline" style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 200px;">
-            <label class="input-label" for="trimNewStop" style="margin: 0;">
-              New Stop
-              <span class="label-optional" id="newStopOptional">(optional)</span>
-            </label>
-            <div class="input-wrapper input-wrapper--prefix input-wrapper--sm">
-              <span class="input-prefix">$</span>
-              <input type="text" class="input input--mono" id="trimNewStop" placeholder="—">
+        <div class="input-group input-group--inline" style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 200px;">
+              <label class="input-label" for="trimNewStop" style="margin: 0;">
+                New Stop
+                <span class="label-optional" id="newStopOptional">(optional)</span>
+              </label>
+              <div class="input-wrapper input-wrapper--prefix input-wrapper--sm">
+                <span class="input-prefix">$</span>
+                <input type="text" class="input input--mono" id="trimNewStop" placeholder="—">
+              </div>
             </div>
+            <label class="checkbox-label" style="margin: 0;">
+              <input type="checkbox" id="onlyMoveStopCheckbox">
+              <span class="checkbox-box"></span>
+              <span class="checkbox-text">Only move stop</span>
+            </label>
           </div>
-          <label class="checkbox-label" style="margin: 0;">
-            <input type="checkbox" id="onlyMoveStopCheckbox">
-            <span class="checkbox-box"></span>
-            <span class="checkbox-text">Only move stop</span>
-          </label>
+          <div class="input-error" id="trimNewStopError" style="align-self: stretch;"></div>
         </div>
       </div>
 

@@ -43,11 +43,13 @@ class TrimModal {
       remainingShares: document.getElementById('trimRemainingShares'),
       exitPrice: document.getElementById('trimExitPrice'),
       rDisplay: document.getElementById('trimRDisplay'),
-      customTrimPercent: document.getElementById('customTrimPercent'),
+      exitPriceError: document.getElementById('trimExitPriceError'),
+      sharesInput: document.getElementById('trimSharesInput'),
+      percentDisplay: document.getElementById('trimPercentDisplay'),
+      sharesError: document.getElementById('trimSharesError'),
       dateInput: document.getElementById('trimDate'),
       newStop: document.getElementById('trimNewStop'),
-      sharesClosing: document.getElementById('trimSharesClosing'),
-      sharesRemaining: document.getElementById('trimSharesRemaining'),
+      newStopError: document.getElementById('trimNewStopError'),
       profitPerShare: document.getElementById('trimProfitPerShare'),
       totalPnL: document.getElementById('trimTotalPnL'),
       preview: document.getElementById('trimPreview'),
@@ -64,7 +66,10 @@ class TrimModal {
       entryDateEdit: document.getElementById('trimEntryDateEdit'),
       targetDisplay: document.getElementById('trimTarget'),
       targetInput: document.getElementById('trimTargetInput'),
-      targetEdit: document.getElementById('trimTargetEdit')
+      targetEdit: document.getElementById('trimTargetEdit'),
+      entryPriceError: document.getElementById('trimEntryPriceError'),
+      originalStopError: document.getElementById('trimOriginalStopError'),
+      targetError: document.getElementById('trimTargetError')
     };
 
     // Cache sections for show/hide (done after modal is in DOM)
@@ -124,8 +129,12 @@ class TrimModal {
       btn.addEventListener('click', (e) => this.selectTrimPercent(e));
     });
 
-    this.elements.customTrimPercent?.addEventListener('input', () => this.handleCustomTrimPercent());
-    this.elements.exitPrice?.addEventListener('input', () => this.handleManualExitPrice());
+    this.elements.sharesInput?.addEventListener('input', (e) => this.sanitizeSharesInput(e));
+    this.elements.exitPrice?.addEventListener('input', (e) => this.sanitizeExitPriceInput(e));
+    this.elements.newStop?.addEventListener('input', (e) => this.sanitizeNewStopInput(e));
+    this.elements.entryPriceInput?.addEventListener('input', (e) => this.sanitizeEntryPriceInput(e));
+    this.elements.originalStopInput?.addEventListener('input', (e) => this.sanitizeOriginalStopInput(e));
+    this.elements.targetInput?.addEventListener('input', (e) => this.sanitizeTargetInput(e));
     this.elements.confirmBtn?.addEventListener('click', () => this.confirm());
     this.elements.onlyMoveStopCheckbox?.addEventListener('change', () => this.handleOnlyMoveStopToggle());
     this.elements.onlyChangeTargetCheckbox?.addEventListener('change', () => this.handleOnlyChangeTargetToggle());
@@ -186,7 +195,7 @@ class TrimModal {
     // Reset edit mode
     this.isEditMode = false;
     if (this.elements.editPositionDetailsBtn) {
-      this.elements.editPositionDetailsBtn.textContent = 'Edit trade details';
+      this.elements.editPositionDetailsBtn.textContent = 'Edit position details';
     }
 
     this.showAllSections();
@@ -199,9 +208,8 @@ class TrimModal {
       btn.classList.toggle('active', parseInt(btn.dataset.trim) === this.selectedTrimPercent);
     });
 
-    if (this.elements.customTrimPercent) this.elements.customTrimPercent.value = '';
-
     this.calculateExitPrice();
+    this.calculateShares();
     this.calculatePreview();
 
     this.elements.modal?.classList.add('open');
@@ -304,13 +312,8 @@ class TrimModal {
       btn.classList.toggle('active', parseInt(btn.dataset.trim) === percent);
     });
 
-    // If no preset matches, show in custom input
-    const hasMatchingPreset = Array.from(this.elements.modal?.querySelectorAll('[data-trim]') || [])
-      .some(btn => parseInt(btn.dataset.trim) === percent);
-
-    if (this.elements.customTrimPercent) {
-      this.elements.customTrimPercent.value = hasMatchingPreset ? '' : percent;
-    }
+    // Update shares input and percentage display
+    this.calculateShares();
   }
 
   selectTrimPercent(e) {
@@ -321,17 +324,8 @@ class TrimModal {
     this.elements.modal?.querySelectorAll('[data-trim]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    if (this.elements.customTrimPercent) this.elements.customTrimPercent.value = '';
+    this.calculateShares();
     this.calculatePreview();
-  }
-
-  handleCustomTrimPercent() {
-    const value = parseFloat(this.elements.customTrimPercent?.value);
-    if (!isNaN(value) && value > 0 && value <= 100) {
-      this.selectedTrimPercent = value;
-      this.elements.modal?.querySelectorAll('[data-trim]').forEach(b => b.classList.remove('active'));
-      this.calculatePreview();
-    }
   }
 
   handleManualExitPrice() {
@@ -348,7 +342,75 @@ class TrimModal {
       this.elements.rDisplay.classList.toggle('negative', rMultiple < 0);
     }
 
-    this.elements.modal?.querySelectorAll('[data-r]').forEach(b => b.classList.remove('active'));
+    // Check if exit price matches any R-multiple button
+    let matchingRButton = null;
+    this.elements.modal?.querySelectorAll('[data-r]').forEach(btn => {
+      const r = parseInt(btn.dataset.r);
+      const expectedPrice = this.currentTrade.entry + (r * riskPerShare);
+      // Match if within 0.01 of expected price
+      if (Math.abs(exitPrice - expectedPrice) < 0.01) {
+        matchingRButton = btn;
+        this.selectedR = r;
+      }
+    });
+
+    // Update button states
+    this.elements.modal?.querySelectorAll('[data-r]').forEach(btn => {
+      btn.classList.toggle('active', btn === matchingRButton);
+    });
+
+    this.calculatePreview();
+  }
+
+  calculateShares() {
+    if (!this.currentTrade) return;
+
+    const remainingShares = this.currentTrade.remainingShares ?? this.currentTrade.shares;
+    const sharesToClose = Math.ceil(remainingShares * (this.selectedTrimPercent / 100));
+
+    if (this.elements.sharesInput) {
+      this.elements.sharesInput.value = sharesToClose;
+    }
+
+    if (this.elements.percentDisplay) {
+      const actualPercent = Math.round((sharesToClose / remainingShares) * 100);
+      this.elements.percentDisplay.textContent = `(${actualPercent}%)`;
+    }
+  }
+
+  handleManualShares() {
+    const shares = parseInt(this.elements.sharesInput?.value);
+    if (!this.currentTrade || isNaN(shares) || shares <= 0) return;
+
+    const remainingShares = this.currentTrade.remainingShares ?? this.currentTrade.shares;
+    const percent = (shares / remainingShares) * 100;
+
+    // Update percentage display (no decimals)
+    if (this.elements.percentDisplay) {
+      this.elements.percentDisplay.textContent = `(${Math.round(percent)}%)`;
+    }
+
+    // Check if shares match any preset percentage button
+    let matchingButton = null;
+    this.elements.modal?.querySelectorAll('[data-trim]').forEach(btn => {
+      const presetPercent = parseInt(btn.dataset.trim);
+      const expectedShares = Math.ceil(remainingShares * (presetPercent / 100));
+      if (shares === expectedShares) {
+        matchingButton = btn;
+        this.selectedTrimPercent = presetPercent;
+      }
+    });
+
+    // Update button states
+    this.elements.modal?.querySelectorAll('[data-trim]').forEach(btn => {
+      btn.classList.toggle('active', btn === matchingButton);
+    });
+
+    // If no match, store the custom percentage
+    if (!matchingButton) {
+      this.selectedTrimPercent = percent;
+    }
+
     this.calculatePreview();
   }
 
@@ -372,15 +434,20 @@ class TrimModal {
 
     const exitPrice = parseFloat(this.elements.exitPrice?.value) || 0;
     const remainingShares = this.currentTrade.remainingShares ?? this.currentTrade.shares;
-    const sharesToClose = Math.floor(remainingShares * (this.selectedTrimPercent / 100));
+
+    // Get shares from input, or calculate from percentage if input is empty
+    let sharesToClose;
+    if (this.elements.sharesInput?.value) {
+      sharesToClose = parseInt(this.elements.sharesInput.value) || 0;
+    } else {
+      sharesToClose = Math.ceil(remainingShares * (this.selectedTrimPercent / 100));
+    }
+
     const sharesRemaining = remainingShares - sharesToClose;
 
     const profitPerShare = exitPrice - this.currentTrade.entry;
     const totalPnL = profitPerShare * sharesToClose;
     const isProfit = totalPnL >= 0;
-
-    if (this.elements.sharesClosing) this.elements.sharesClosing.textContent = `${formatNumber(sharesToClose)} shares`;
-    if (this.elements.sharesRemaining) this.elements.sharesRemaining.textContent = `(${formatNumber(sharesRemaining)} remaining)`;
 
     if (this.elements.profitPerShare) {
       this.elements.profitPerShare.textContent = `${isProfit ? '+' : ''}${formatCurrency(profitPerShare)}`;
@@ -534,6 +601,14 @@ class TrimModal {
     // Toggle edit mode
     this.isEditMode = !this.isEditMode;
 
+    // Clear all errors when toggling modes
+    this.clearInputError(this.elements.entryPriceInput, this.elements.entryPriceError);
+    this.clearInputError(this.elements.originalStopInput, this.elements.originalStopError);
+    this.clearInputError(this.elements.targetInput, this.elements.targetError);
+    this.clearInputError(this.elements.exitPrice, this.elements.exitPriceError);
+    this.clearInputError(this.elements.sharesInput, this.elements.sharesError);
+    this.clearInputError(this.elements.newStop, this.elements.newStopError);
+
     if (this.isEditMode) {
       // Edit mode: Show inputs, hide all trim/close sections
       this.showEditInputs();
@@ -547,7 +622,7 @@ class TrimModal {
 
       // Update buttons
       if (this.elements.editPositionDetailsBtn) {
-        this.elements.editPositionDetailsBtn.textContent = 'Back to trim/close';
+        this.elements.editPositionDetailsBtn.textContent = 'Cancel';
       }
       if (this.elements.confirmBtn) {
         this.elements.confirmBtn.textContent = 'Confirm';
@@ -582,7 +657,7 @@ class TrimModal {
 
       // Update buttons
       if (this.elements.editPositionDetailsBtn) {
-        this.elements.editPositionDetailsBtn.textContent = 'Edit trade details';
+        this.elements.editPositionDetailsBtn.textContent = 'Edit position details';
       }
     }
   }
@@ -592,6 +667,11 @@ class TrimModal {
 
     // Check if "Edit position details" mode is active
     if (this.isEditMode) {
+      // Clear all errors first
+      this.clearInputError(this.elements.entryPriceInput, this.elements.entryPriceError);
+      this.clearInputError(this.elements.originalStopInput, this.elements.originalStopError);
+      this.clearInputError(this.elements.targetInput, this.elements.targetError);
+
       // Edit position details mode - update entry, original stop, and target
       const newEntry = parseFloat(this.elements.entryPriceInput?.value);
       const newOriginalStop = parseFloat(this.elements.originalStopInput?.value);
@@ -599,12 +679,20 @@ class TrimModal {
       const newTarget = parseFloat(this.elements.targetInput?.value);
 
       if (isNaN(newEntry) || newEntry <= 0) {
-        showToast('Please enter a valid entry price', 'error');
+        this.showInputError(
+          this.elements.entryPriceInput,
+          this.elements.entryPriceError,
+          'Entry price must be greater than 0'
+        );
         return;
       }
 
       if (isNaN(newOriginalStop) || newOriginalStop <= 0) {
-        showToast('Please enter a valid original stop', 'error');
+        this.showInputError(
+          this.elements.originalStopInput,
+          this.elements.originalStopError,
+          'Original stop must be greater than 0'
+        );
         return;
       }
 
@@ -615,7 +703,21 @@ class TrimModal {
 
       // Target is optional, but if provided must be valid
       if (this.elements.targetInput?.value && (isNaN(newTarget) || newTarget <= 0)) {
-        showToast('Please enter a valid target price', 'error');
+        this.showInputError(
+          this.elements.targetInput,
+          this.elements.targetError,
+          'Target price must be greater than 0'
+        );
+        return;
+      }
+
+      // Ensure target is greater than entry
+      if (this.elements.targetInput?.value && !isNaN(newTarget) && newTarget <= newEntry) {
+        this.showInputError(
+          this.elements.targetInput,
+          this.elements.targetError,
+          'Target price must be greater than entry price'
+        );
         return;
       }
 
@@ -715,7 +817,11 @@ class TrimModal {
       // Only change target mode - update target without closing shares
       const exitPrice = parseFloat(this.elements.exitPrice?.value);
       if (isNaN(exitPrice) || exitPrice <= 0) {
-        showToast('Enter a target price', 'error');
+        this.showInputError(
+          this.elements.exitPrice,
+          this.elements.exitPriceError,
+          'Exit price must be a valid number greater than 0'
+        );
         return;
       }
 
@@ -733,12 +839,23 @@ class TrimModal {
     // Normal trim/close mode
     const exitPrice = parseFloat(this.elements.exitPrice?.value);
     if (isNaN(exitPrice) || exitPrice <= 0) {
-      showToast('Please enter a valid exit price', 'error');
+      this.showInputError(
+        this.elements.exitPrice,
+        this.elements.exitPriceError,
+        'Exit price must be a valid number greater than 0'
+      );
       return;
     }
 
     const remainingShares = this.currentTrade.remainingShares ?? this.currentTrade.shares;
-    const sharesToClose = Math.floor(remainingShares * (this.selectedTrimPercent / 100));
+
+    // Get shares from input, or calculate from percentage if input is empty
+    let sharesToClose;
+    if (this.elements.sharesInput?.value) {
+      sharesToClose = parseInt(this.elements.sharesInput.value) || 0;
+    } else {
+      sharesToClose = Math.ceil(remainingShares * (this.selectedTrimPercent / 100));
+    }
 
     if (sharesToClose <= 0) {
       showToast('No shares to close', 'error');
@@ -756,6 +873,9 @@ class TrimModal {
       ? new Date(this.elements.dateInput.value + 'T12:00:00').toISOString()
       : new Date().toISOString();
 
+    // Calculate actual percentage trimmed based on shares
+    const actualPercentTrimmed = (sharesToClose / remainingShares) * 100;
+
     const trimEvent = {
       id: Date.now(),
       date: closeDate,
@@ -763,7 +883,7 @@ class TrimModal {
       exitPrice: exitPrice,
       rMultiple: rMultiple,
       pnl: pnl,
-      percentTrimmed: this.selectedTrimPercent
+      percentTrimmed: Math.round(actualPercentTrimmed)
     };
 
     if (!this.currentTrade.trimHistory) this.currentTrade.trimHistory = [];
@@ -804,13 +924,231 @@ class TrimModal {
     state.updateAccount({ currentSize: newSize });
     state.emit('accountSizeChanged', newSize);
 
-    const actionText = isFullClose ? 'closed' : `trimmed ${this.selectedTrimPercent}%`;
+    const actionText = isFullClose ? 'closed' : `trimmed ${Math.round(actualPercentTrimmed)}%`;
     showToast(
       `${this.currentTrade.ticker} ${actionText}: ${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}`,
       pnl >= 0 ? 'success' : 'warning'
     );
 
     this.close();
+  }
+
+  showInputError(inputElement, errorElement, message) {
+    // Add error class to input
+    if (inputElement) {
+      inputElement.classList.add('input--error');
+    }
+
+    // Show error message
+    if (errorElement) {
+      errorElement.textContent = message;
+      errorElement.classList.add('input-error--visible');
+    }
+
+    // Focus the input
+    if (inputElement) {
+      inputElement.focus();
+    }
+  }
+
+  clearInputError(inputElement, errorElement) {
+    // Remove error class from input
+    if (inputElement) {
+      inputElement.classList.remove('input--error');
+    }
+
+    // Hide error message
+    if (errorElement) {
+      errorElement.classList.remove('input-error--visible');
+      errorElement.textContent = '';
+    }
+  }
+
+  sanitizeDecimalInput(e) {
+    const input = e.target;
+    let value = input.value;
+
+    // Allow only numbers and one decimal point
+    // Remove any character that's not a digit or decimal point
+    value = value.replace(/[^\d.]/g, '');
+
+    // Allow only one decimal point
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Update input value with sanitized version
+    input.value = value;
+  }
+
+  sanitizeExitPriceInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.exitPrice, this.elements.exitPriceError);
+
+    // Validate exit price if value is provided
+    const value = this.elements.exitPrice?.value.trim();
+    if (value) {
+      const exitPrice = parseFloat(value);
+      if (!isNaN(exitPrice) && exitPrice <= 0) {
+        this.showInputError(
+          this.elements.exitPrice,
+          this.elements.exitPriceError,
+          'Exit price must be greater than 0'
+        );
+        return; // Don't call handler if there's an error
+      }
+    }
+
+    // Call the manual exit price handler
+    this.handleManualExitPrice();
+  }
+
+  sanitizeNewStopInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.newStop, this.elements.newStopError);
+
+    // Validate new stop if value is provided
+    const value = this.elements.newStop?.value.trim();
+    if (value) {
+      const newStop = parseFloat(value);
+      if (!isNaN(newStop) && newStop <= 0) {
+        this.showInputError(
+          this.elements.newStop,
+          this.elements.newStopError,
+          'New stop must be greater than 0'
+        );
+      }
+    }
+  }
+
+  sanitizeEntryPriceInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.entryPriceInput, this.elements.entryPriceError);
+
+    // Validate entry price if value is provided
+    const value = this.elements.entryPriceInput?.value.trim();
+    if (value) {
+      const entryPrice = parseFloat(value);
+      if (!isNaN(entryPrice) && entryPrice <= 0) {
+        this.showInputError(
+          this.elements.entryPriceInput,
+          this.elements.entryPriceError,
+          'Entry price must be greater than 0'
+        );
+      }
+    }
+  }
+
+  sanitizeOriginalStopInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.originalStopInput, this.elements.originalStopError);
+
+    // Validate original stop if value is provided
+    const value = this.elements.originalStopInput?.value.trim();
+    if (value) {
+      const originalStop = parseFloat(value);
+      if (!isNaN(originalStop) && originalStop <= 0) {
+        this.showInputError(
+          this.elements.originalStopInput,
+          this.elements.originalStopError,
+          'Original stop must be greater than 0'
+        );
+      }
+    }
+  }
+
+  sanitizeTargetInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.targetInput, this.elements.targetError);
+
+    // Validate target if value is provided
+    const value = this.elements.targetInput?.value.trim();
+    if (value) {
+      const target = parseFloat(value);
+
+      // Check if target > 0
+      if (!isNaN(target) && target <= 0) {
+        this.showInputError(
+          this.elements.targetInput,
+          this.elements.targetError,
+          'Target price must be greater than 0'
+        );
+        return;
+      }
+
+      // Check if target > entry price
+      const entryValue = this.elements.entryPriceInput?.value.trim();
+      if (entryValue) {
+        const entryPrice = parseFloat(entryValue);
+        if (!isNaN(target) && !isNaN(entryPrice) && target <= entryPrice) {
+          this.showInputError(
+            this.elements.targetInput,
+            this.elements.targetError,
+            'Target price must be greater than entry price'
+          );
+        }
+      }
+    }
+  }
+
+  sanitizeSharesInput(e) {
+    const input = e.target;
+    let value = input.value;
+
+    // Allow only integers (no decimals)
+    // Remove any character that's not a digit
+    value = value.replace(/[^\d]/g, '');
+
+    // Update input value with sanitized version
+    input.value = value;
+
+    // Clear any existing error first
+    this.clearInputError(this.elements.sharesInput, this.elements.sharesError);
+
+    // Validate shares if value is provided
+    if (this.currentTrade && value) {
+      const shares = parseInt(value);
+      const remainingShares = this.currentTrade.remainingShares ?? this.currentTrade.shares;
+
+      // Check if shares is greater than 0
+      if (!isNaN(shares) && shares <= 0) {
+        this.showInputError(
+          this.elements.sharesInput,
+          this.elements.sharesError,
+          'Shares must be greater than 0'
+        );
+        return; // Don't call handleManualShares if there's an error
+      }
+
+      // Check if shares exceed remaining shares
+      if (!isNaN(shares) && shares > remainingShares) {
+        this.showInputError(
+          this.elements.sharesInput,
+          this.elements.sharesError,
+          `Exceeds ${remainingShares} remaining share(s)`
+        );
+        return; // Don't call handleManualShares if there's an error
+      }
+    }
+
+    // Call the manual shares handler
+    this.handleManualShares();
   }
 
 }

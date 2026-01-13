@@ -284,56 +284,12 @@ class TradeWizard {
       await this.validateTickerOnBlur();
     });
 
-    // Entry, stop, shares, target inputs - update state as user types
-    this.elements.wizardEntryPrice?.addEventListener('input', () => {
-      const entry = parseFloat(this.elements.wizardEntryPrice.value) || 0;
-      state.updateTrade({ entry });
-      this.updateRMultipleButtons();
-      this.updateRiskButtons();
-      this.updateRiskDisplay();
-      this.updateTargetRDisplay();
-    });
-    this.elements.wizardStopLoss?.addEventListener('input', () => {
-      const stop = parseFloat(this.elements.wizardStopLoss.value) || 0;
-      state.updateTrade({ stop });
-      this.updateRMultipleButtons();
-      this.updateRiskButtons();
-      this.updateRiskDisplay();
-      this.updateTargetRDisplay();
-    });
-    this.elements.wizardShares?.addEventListener('input', () => {
-      // Remove active state when shares manually changed
-      this.elements.wizardRiskPercentBtns?.forEach(b => b.classList.remove('active'));
-
-      this.updateRMultipleButtons();
-      this.updateRiskButtons();
-      this.updateRiskDisplay();
-    });
-    this.elements.wizardTargetPrice?.addEventListener('input', () => {
-      const target = parseFloat(this.elements.wizardTargetPrice.value) || 0;
-      state.updateTrade({ target });
-      this.updateTargetRDisplay();
-
-      // Check if target matches any R-Multiple preset and deselect if not
-      const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
-      const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
-
-      if (entry > 0 && stop > 0 && target > 0 && entry !== stop) {
-        const riskPerShare = entry - stop;
-        const presetRMultiples = [1, 2, 3, 4, 5];
-
-        // Check if current target matches any preset R-Multiple
-        const matchingPreset = presetRMultiples.find(r => {
-          const presetTarget = entry + (r * riskPerShare);
-          return Math.abs(target - presetTarget) < 0.01; // Allow small floating point differences
-        });
-
-        // If no match, deselect all R-Multiple buttons
-        if (!matchingPreset) {
-          this.elements.wizardRMultipleBtns?.forEach(btn => btn.classList.remove('active'));
-        }
-      }
-    });
+    // Entry, stop, shares, target inputs - sanitize and validate as user types
+    this.elements.wizardEntryPrice?.addEventListener('input', (e) => this.sanitizeEntryPriceInput(e));
+    this.elements.wizardStopLoss?.addEventListener('input', (e) => this.sanitizeStopLossInput(e));
+    this.elements.wizardShares?.addEventListener('input', (e) => this.sanitizeSharesInput(e));
+    this.elements.wizardTargetPrice?.addEventListener('input', (e) => this.sanitizeTargetPriceInput(e));
+    this.elements.wizardRiskDollar?.addEventListener('input', (e) => this.sanitizeRiskDollarInput(e));
 
     // R-Multiple buttons
     this.elements.wizardRMultipleBtns?.forEach(btn => {
@@ -374,21 +330,6 @@ class TradeWizard {
     this.elements.wizardTicker?.addEventListener('input', () => {
       this.clearInputError(this.elements.wizardTicker, this.elements.wizardTickerError);
       this.hideTickerStatus(); // Also hide validation status icons
-    });
-    this.elements.wizardEntryPrice?.addEventListener('input', () => {
-      this.clearInputError(this.elements.wizardEntryPrice, this.elements.wizardEntryPriceError);
-    });
-    this.elements.wizardStopLoss?.addEventListener('input', () => {
-      this.clearInputError(this.elements.wizardStopLoss, this.elements.wizardStopLossError);
-    });
-    this.elements.wizardShares?.addEventListener('input', () => {
-      this.clearInputError(this.elements.wizardShares, this.elements.wizardSharesError);
-    });
-    this.elements.wizardRiskDollar?.addEventListener('input', () => {
-      this.clearInputError(this.elements.wizardRiskDollar, this.elements.wizardRiskDollarError);
-    });
-    this.elements.wizardTargetPrice?.addEventListener('input', () => {
-      this.clearInputError(this.elements.wizardTargetPrice, this.elements.wizardTargetPriceError);
     });
     this.elements.wizardTradeDate?.addEventListener('change', () => {
       this.clearInputError(this.elements.wizardTradeDate, this.elements.wizardTradeDateError);
@@ -537,7 +478,7 @@ class TradeWizard {
       this.showInputError(
         this.elements.wizardEntryPrice,
         this.elements.wizardEntryPriceError,
-        'Entry price must be a valid number greater than 0'
+        'Entry price must be greater than 0'
       );
       return false;
     }
@@ -547,7 +488,7 @@ class TradeWizard {
       this.showInputError(
         this.elements.wizardStopLoss,
         this.elements.wizardStopLossError,
-        'Stop loss must be a valid number greater than 0'
+        'Stop loss must be greater than 0'
       );
       return false;
     }
@@ -557,7 +498,7 @@ class TradeWizard {
       this.showInputError(
         this.elements.wizardShares,
         this.elements.wizardSharesError,
-        'Shares must be a valid number greater than 0'
+        'Shares must be greater than 0'
       );
       return false;
     }
@@ -570,7 +511,7 @@ class TradeWizard {
         this.showInputError(
           this.elements.wizardRiskDollar,
           this.elements.wizardRiskDollarError,
-          'Risk must be a valid number greater than 0'
+          'Risk must be greater than 0'
         );
         return false;
       }
@@ -583,7 +524,7 @@ class TradeWizard {
         this.showInputError(
           this.elements.wizardTargetPrice,
           this.elements.wizardTargetPriceError,
-          'Target price must be a valid number greater than 0'
+          'Target price must be greater than 0'
         );
         return false;
       }
@@ -1172,24 +1113,35 @@ class TradeWizard {
   }
 
   showInputError(inputElement, errorElement, message) {
+    console.log('[DEBUG] showInputError called', { inputElement, errorElement, message });
+
     // Add error class to input
     if (inputElement) {
       inputElement.classList.add('input--error');
+      console.log('[DEBUG] Added input--error class to input');
+    } else {
+      console.log('[DEBUG] WARNING: inputElement is null/undefined');
     }
 
     // Show error message
     if (errorElement) {
       errorElement.textContent = message;
       errorElement.classList.add('input-error--visible');
+      console.log('[DEBUG] Set error text and added input-error--visible class', errorElement);
+    } else {
+      console.log('[DEBUG] WARNING: errorElement is null/undefined');
     }
 
-    // Focus the input
-    if (inputElement) {
-      inputElement.focus();
-    }
+    // Don't focus - it triggers another input event that clears the error
+    // if (inputElement) {
+    //   inputElement.focus();
+    // }
   }
 
   clearInputError(inputElement, errorElement) {
+    console.log('[DEBUG] clearInputError called', { inputElement, errorElement });
+    console.trace('[DEBUG] clearInputError stack trace');
+
     // Remove error class from input
     if (inputElement) {
       inputElement.classList.remove('input--error');
@@ -1294,6 +1246,212 @@ class TradeWizard {
         this.elements.wizardTickerError,
         errorMsg
       );
+    }
+  }
+
+  sanitizeDecimalInput(e) {
+    const input = e.target;
+    const originalValue = input.value;
+    let value = originalValue;
+
+    // Allow only numbers and one decimal point
+    value = value.replace(/[^\d.]/g, '');
+
+    // Allow only one decimal point
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Only update if value changed (to avoid triggering another input event)
+    if (value !== originalValue) {
+      input.value = value;
+    }
+  }
+
+  sanitizeEntryPriceInput(e) {
+    console.log('[DEBUG] sanitizeEntryPriceInput called', e.target.value);
+
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.wizardEntryPrice, this.elements.wizardEntryPriceError);
+
+    // Validate entry price if value is provided
+    const value = this.elements.wizardEntryPrice?.value.trim();
+    console.log('[DEBUG] Entry price value after sanitize:', value);
+
+    if (value) {
+      const entryPrice = parseFloat(value);
+      console.log('[DEBUG] Parsed entry price:', entryPrice, 'Should show error?', entryPrice <= 0);
+
+      if (!isNaN(entryPrice) && entryPrice <= 0) {
+        console.log('[DEBUG] Showing error for entry price');
+        this.showInputError(
+          this.elements.wizardEntryPrice,
+          this.elements.wizardEntryPriceError,
+          'Entry price must be greater than 0'
+        );
+        return; // Don't update state if there's an error
+      }
+    }
+
+    // Update state and UI
+    const entry = parseFloat(this.elements.wizardEntryPrice.value) || 0;
+    state.updateTrade({ entry });
+    this.updateRMultipleButtons();
+    this.updateRiskButtons();
+    this.updateRiskDisplay();
+    this.updateTargetRDisplay();
+  }
+
+  sanitizeStopLossInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.wizardStopLoss, this.elements.wizardStopLossError);
+
+    // Validate stop loss if value is provided
+    const value = this.elements.wizardStopLoss?.value.trim();
+    if (value) {
+      const stopLoss = parseFloat(value);
+      if (!isNaN(stopLoss) && stopLoss <= 0) {
+        this.showInputError(
+          this.elements.wizardStopLoss,
+          this.elements.wizardStopLossError,
+          'Stop loss must be greater than 0'
+        );
+        return; // Don't update state if there's an error
+      }
+    }
+
+    // Update state and UI
+    const stop = parseFloat(this.elements.wizardStopLoss.value) || 0;
+    state.updateTrade({ stop });
+    this.updateRMultipleButtons();
+    this.updateRiskButtons();
+    this.updateRiskDisplay();
+    this.updateTargetRDisplay();
+  }
+
+  sanitizeSharesInput(e) {
+    const input = e.target;
+    let value = input.value;
+
+    // Allow only integers (no decimals)
+    value = value.replace(/[^\d]/g, '');
+
+    // Update input value with sanitized version
+    input.value = value;
+
+    // Clear any existing error
+    this.clearInputError(this.elements.wizardShares, this.elements.wizardSharesError);
+
+    // Validate shares if value is provided
+    if (value) {
+      const shares = parseInt(value);
+      if (!isNaN(shares) && shares <= 0) {
+        this.showInputError(
+          this.elements.wizardShares,
+          this.elements.wizardSharesError,
+          'Shares must be greater than 0'
+        );
+        return; // Don't update state if there's an error
+      }
+    }
+
+    // Remove active state when shares manually changed
+    this.elements.wizardRiskPercentBtns?.forEach(b => b.classList.remove('active'));
+
+    // Update UI
+    this.updateRMultipleButtons();
+    this.updateRiskButtons();
+    this.updateRiskDisplay();
+  }
+
+  sanitizeTargetPriceInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.wizardTargetPrice, this.elements.wizardTargetPriceError);
+
+    // Validate target price if value is provided
+    const value = this.elements.wizardTargetPrice?.value.trim();
+    if (value) {
+      const target = parseFloat(value);
+
+      // Check if target > 0
+      if (!isNaN(target) && target <= 0) {
+        this.showInputError(
+          this.elements.wizardTargetPrice,
+          this.elements.wizardTargetPriceError,
+          'Target price must be greater than 0'
+        );
+        return; // Don't update state if there's an error
+      }
+
+      // Check if target > entry price
+      const entryValue = this.elements.wizardEntryPrice?.value.trim();
+      if (entryValue) {
+        const entryPrice = parseFloat(entryValue);
+        if (!isNaN(target) && !isNaN(entryPrice) && target <= entryPrice) {
+          this.showInputError(
+            this.elements.wizardTargetPrice,
+            this.elements.wizardTargetPriceError,
+            'Target price must be greater than entry price'
+          );
+          return; // Don't update state if there's an error
+        }
+      }
+    }
+
+    // Update state and UI
+    const target = parseFloat(this.elements.wizardTargetPrice.value) || 0;
+    state.updateTrade({ target });
+    this.updateTargetRDisplay();
+
+    // Check if target matches any R-Multiple preset and update UI
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const riskPerShare = entry - stop;
+
+    if (riskPerShare > 0) {
+      const rMultiple = (target - entry) / riskPerShare;
+      let matchFound = false;
+
+      this.elements.wizardRMultipleBtns?.forEach(btn => {
+        const btnR = parseInt(btn.dataset.r);
+        if (Math.abs(rMultiple - btnR) < 0.01) {
+          btn.classList.add('active');
+          matchFound = true;
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+  }
+
+  sanitizeRiskDollarInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.wizardRiskDollar, this.elements.wizardRiskDollarError);
+
+    // Validate risk dollar if value is provided
+    const value = this.elements.wizardRiskDollar?.value.trim();
+    if (value) {
+      const riskDollar = parseFloat(value);
+      if (!isNaN(riskDollar) && riskDollar <= 0) {
+        this.showInputError(
+          this.elements.wizardRiskDollar,
+          this.elements.wizardRiskDollarError,
+          'Risk must be greater than 0'
+        );
+      }
     }
   }
 }
