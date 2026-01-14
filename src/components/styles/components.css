@@ -5133,24 +5133,6 @@ input[type="date"].input:focus {
   z-index: 10000;
 }
 
-/* Achievement Toast */
-.toast--achievement {
-  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
-  border: 1px solid var(--success);
-  box-shadow: 0 0 20px var(--success-glow);
-}
-
-.toast--achievement .toast__icon {
-  font-size: var(--text-2xl);
-  animation: badgeUnlock 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes badgeUnlock {
-  0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-  50% { transform: scale(1.2) rotate(10deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
-
 /* Mobile Wizard */
 @media (max-width: 768px) {
   .modal--wizard {

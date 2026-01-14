@@ -24,19 +24,34 @@ export const dataManager = {
 
   exportAllData() {
     const data = {
-      version: 2,
+      version: 3,
       exportDate: new Date().toISOString(),
       settings: state.settings,
       journal: state.journal.entries,
+      journalMeta: state.state.journalMeta,
       cashFlow: state.state.cashFlow,
       account: {
         realizedPnL: state.account.realizedPnL
       },
       apiKeys: {
         finnhub: localStorage.getItem('finnhubApiKey') || '',
+        twelveData: localStorage.getItem('twelveDataApiKey') || '',
         alphaVantage: localStorage.getItem('alphaVantageApiKey') || ''
       }
     };
+
+    console.log('Exporting data:', {
+      version: data.version,
+      tradesCount: data.journal.length,
+      startingBalance: data.settings.startingAccountSize,
+      realizedPnL: data.account.realizedPnL,
+      cashFlowNet: data.cashFlow.totalDeposits - data.cashFlow.totalWithdrawals,
+      apiKeys: {
+        finnhub: !!data.apiKeys.finnhub,
+        twelveData: !!data.apiKeys.twelveData,
+        alphaVantage: !!data.apiKeys.alphaVantage
+      }
+    });
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -71,50 +86,52 @@ export const dataManager = {
             return;
           }
 
-          // Restore settings
-          Object.assign(state.state.settings, data.settings);
-          state.saveSettings();
+          // Write everything to localStorage immediately
+          localStorage.setItem('riskCalcSettings', JSON.stringify(data.settings));
+          localStorage.setItem('riskCalcJournal', JSON.stringify(data.journal || []));
 
-          // Restore journal
-          state.state.journal.entries = data.journal || [];
-          state.saveJournal();
-
-          // Restore cash flow (version 2+)
-          if (data.cashFlow) {
-            state.state.cashFlow = data.cashFlow;
-            state.saveCashFlow();
+          if (data.journalMeta) {
+            localStorage.setItem('riskCalcJournalMeta', JSON.stringify(data.journalMeta));
           }
 
-          // Restore account P&L
-          if (data.account) {
-            state.state.account.realizedPnL = data.account.realizedPnL || 0;
-          }
+          // Always write cash flow, even if missing (set to default)
+          const cashFlowData = data.cashFlow || {
+            transactions: [],
+            totalDeposits: 0,
+            totalWithdrawals: 0
+          };
+          localStorage.setItem('riskCalcCashFlow', JSON.stringify(cashFlowData));
 
-          // Restore API keys
+          // Restore API keys - always set them even if empty to overwrite existing
           if (data.apiKeys) {
-            if (data.apiKeys.finnhub) {
-              localStorage.setItem('finnhubApiKey', data.apiKeys.finnhub);
-            }
-            if (data.apiKeys.alphaVantage) {
-              localStorage.setItem('alphaVantageApiKey', data.apiKeys.alphaVantage);
-            }
+            localStorage.setItem('finnhubApiKey', data.apiKeys.finnhub || '');
+            localStorage.setItem('twelveDataApiKey', data.apiKeys.twelveData || '');
+            localStorage.setItem('alphaVantageApiKey', data.apiKeys.alphaVantage || '');
           } else if (data.apiKey) {
             // Legacy support (version 1)
             localStorage.setItem('finnhubApiKey', data.apiKey);
+            localStorage.setItem('twelveDataApiKey', '');
+            localStorage.setItem('alphaVantageApiKey', '');
           }
 
-          // Recalculate current account size including cash flow (dynamic account tracking always enabled)
-          const netCashFlow = (data.cashFlow?.totalDeposits || 0) - (data.cashFlow?.totalWithdrawals || 0);
-          state.state.account.currentSize =
-            state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
+          console.log(`Data imported: ${data.journal.length} trades from backup (version ${data.version || 1})`);
+          console.log('API Keys imported:', {
+            finnhub: !!(data.apiKeys?.finnhub),
+            twelveData: !!(data.apiKeys?.twelveData),
+            alphaVantage: !!(data.apiKeys?.alphaVantage)
+          });
 
-          // Refresh UI
-          if (settingsModule) settingsModule.loadAndApply();
-          if (calculatorModule) calculatorModule.calculate();
-          if (journalModule) journalModule.render();
+          // Warn about missing data in older versions
+          if (!data.version || data.version < 3) {
+            console.warn('⚠️ Imported from older backup version. TwelveData API key not in backup - you may need to re-enter it.');
+          }
 
-          showToast(`📤 Imported ${data.journal.length} trades`, 'success');
-          console.log(`Data imported: ${data.journal.length} trades from backup`);
+          showToast(`📤 Imported ${data.journal.length} trades - Reloading...`, 'success');
+
+          // Reload page after short delay to ensure all localStorage writes complete
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
         } catch (err) {
           console.error('Import error:', err);
           showToast('❌ Failed to import data', 'error');
@@ -169,20 +186,8 @@ export const dataManager = {
     };
     state.state.journal.entries = [];
 
-    // Reset achievements & progress
+    // Reset journal meta
     state.state.journalMeta = {
-      achievements: {
-        unlocked: [],
-        progress: {
-          totalTrades: 0,
-          currentStreak: 0,
-          longestStreak: 0,
-          lastTradeDate: null,
-          tradesWithNotes: 0,
-          tradesWithThesis: 0,
-          completeWizardCount: 0
-        }
-      },
       settings: {
         wizardEnabled: false,
         celebrationsEnabled: true

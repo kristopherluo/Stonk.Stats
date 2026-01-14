@@ -288,27 +288,6 @@ class Journal {
 
     const newEntry = state.addJournalEntry(entry);
 
-    // Update progress
-    const progress = state.journalMeta.achievements.progress;
-    progress.totalTrades++;
-
-    if (entry.notes) {
-      progress.tradesWithNotes++;
-    }
-
-    // Update streak
-    state.updateStreak();
-
-    // Save progress
-    state.saveJournalMeta();
-
-    // Emit tradeLogged event for achievements
-    state.emit('tradeLogged', {
-      entry: newEntry,
-      wizardComplete: false,
-      thesis: null
-    });
-
     // Trigger confetti if celebrations enabled
     if (state.journalMeta.settings.celebrationsEnabled) {
       state.emit('triggerConfetti');

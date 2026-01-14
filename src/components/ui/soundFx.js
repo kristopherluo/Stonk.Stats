@@ -127,78 +127,6 @@ class SoundFX {
     });
   }
 
-  // Achievement unlock - triumphant fanfare with rich harmonics
-  playAchievement() {
-    if (!this.enabled) return;
-    const ctx = this.ensureContext();
-    const now = ctx.currentTime;
-
-    // Triumphant interval: fifth then octave (G4 -> D5 -> G5)
-    const sequence = [
-      { freq: 392.00, time: 0, duration: 0.15 },      // G4
-      { freq: 587.33, time: 0.12, duration: 0.15 },   // D5
-      { freq: 783.99, time: 0.25, duration: 0.5 },    // G5 (held)
-    ];
-
-    const baseGain = 0.14;
-
-    sequence.forEach(note => {
-      const startTime = now + note.time;
-
-      // Main tone with triangle for warmth
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-
-      osc1.type = 'triangle';
-      osc1.frequency.setValueAtTime(note.freq, startTime);
-
-      // Second oscillator slightly detuned for chorus effect
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(note.freq * 1.002, startTime);
-
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(note.freq * 4, startTime);
-      filter.Q.setValueAtTime(0.5, startTime);
-
-      // Envelope
-      gain.gain.setValueAtTime(0, startTime);
-      gain.gain.linearRampToValueAtTime(baseGain, startTime + 0.015);
-      gain.gain.setValueAtTime(baseGain * 0.8, startTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + note.duration + 0.3);
-
-      osc1.connect(filter);
-      osc2.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.start(startTime);
-      osc2.start(startTime);
-      osc1.stop(startTime + note.duration + 0.4);
-      osc2.stop(startTime + note.duration + 0.4);
-
-      // Add fifth harmonic for richness on final note
-      if (note.duration > 0.3) {
-        const fifth = ctx.createOscillator();
-        const fifthGain = ctx.createGain();
-
-        fifth.type = 'sine';
-        fifth.frequency.setValueAtTime(note.freq * 1.5, startTime);
-
-        fifthGain.gain.setValueAtTime(0, startTime);
-        fifthGain.gain.linearRampToValueAtTime(baseGain * 0.3, startTime + 0.05);
-        fifthGain.gain.exponentialRampToValueAtTime(0.001, startTime + note.duration + 0.2);
-
-        fifth.connect(fifthGain);
-        fifthGain.connect(ctx.destination);
-
-        fifth.start(startTime);
-        fifth.stop(startTime + note.duration + 0.3);
-      }
-    });
-  }
-
   // Subtle click for UI feedback
   playClick() {
     if (!this.enabled) return;
@@ -268,11 +196,10 @@ window.testSound = (type) => {
 
   switch(type) {
     case 'success': soundFx.playSuccess(); break;
-    case 'achievement': soundFx.playAchievement(); break;
     case 'click': soundFx.playClick(); break;
     case 'celebration': soundFx.playCelebration(); break;
     default:
-      console.log('Usage: testSound("success" | "achievement" | "click" | "celebration")');
+      console.log('Usage: testSound("success" | "click" | "celebration")');
       soundFx.enabled = original;
       return;
   }
