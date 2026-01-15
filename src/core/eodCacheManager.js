@@ -29,28 +29,39 @@
  */
 
 import { formatDate, isBusinessDay, getBusinessDaysBetween, parseDate } from '../utils/marketHours.js';
+import { storage } from '../utils/storage.js';
 
 const CACHE_KEY = 'eodCache';
 const CACHE_VERSION = 1;
 
 class EODCacheManager {
   constructor() {
-    this.cache = this._loadCache();
+    this.cache = null;
+    this.initialized = false;
   }
 
   /**
-   * Load cache from localStorage
-   * @returns {Object} Cache object
+   * Initialize the cache (async)
+   * Must be called before using the manager
+   */
+  async init() {
+    if (!this.initialized) {
+      this.cache = await this._loadCache();
+      this.initialized = true;
+    }
+  }
+
+  /**
+   * Load cache from IndexedDB
+   * @returns {Promise<Object>} Cache object
    * @private
    */
-  _loadCache() {
+  async _loadCache() {
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (!cached) {
+      const cache = await storage.getItem(CACHE_KEY);
+      if (!cache) {
         return this._createEmptyCache();
       }
-
-      const cache = JSON.parse(cached);
 
       // Version check
       if (cache.version !== CACHE_VERSION) {
@@ -58,11 +69,113 @@ class EODCacheManager {
         return this._createEmptyCache();
       }
 
-      return cache;
+      // Validate cache structure and clean up corrupted days
+      const validatedCache = await this._validateAndCleanCache(cache);
+
+      return validatedCache;
     } catch (error) {
       console.error('Error loading EOD cache:', error);
       return this._createEmptyCache();
     }
+  }
+
+  /**
+   * Validate cache structure and remove corrupted days
+   * @param {Object} cache - Cache object to validate
+   * @returns {Promise<Object>} Cleaned cache
+   * @private
+   */
+  async _validateAndCleanCache(cache) {
+    if (!cache.days || typeof cache.days !== 'object') {
+      console.error('[EODCache] Corrupted cache: missing or invalid days object');
+      return this._createEmptyCache();
+    }
+
+    const corruptedDays = [];
+
+    // Validate each day's data
+    for (const dateStr in cache.days) {
+      const dayData = cache.days[dateStr];
+
+      if (!this._validateEODData(dayData, dateStr)) {
+        corruptedDays.push(dateStr);
+        delete cache.days[dateStr];
+      }
+    }
+
+    if (corruptedDays.length > 0) {
+      console.warn(`[EODCache] Removed ${corruptedDays.length} corrupted days:`, corruptedDays);
+      // Save cleaned cache
+      try {
+        await storage.setItem(CACHE_KEY, cache);
+      } catch (error) {
+        console.error('[EODCache] Failed to save cleaned cache:', error);
+      }
+    }
+
+    return cache;
+  }
+
+  /**
+   * Validate EOD data structure for a single day
+   * @param {Object} data - EOD data object
+   * @param {string} dateStr - Date string for logging
+   * @returns {boolean} True if valid
+   * @private
+   */
+  _validateEODData(data, dateStr) {
+    // Check if data exists
+    if (!data || typeof data !== 'object') {
+      console.warn(`[EODCache] Invalid data for ${dateStr}: not an object`);
+      return false;
+    }
+
+    // Check required fields exist
+    const requiredFields = ['balance', 'unrealizedPnL', 'stockPrices', 'positionsOwned'];
+    for (const field of requiredFields) {
+      if (!(field in data)) {
+        console.warn(`[EODCache] Invalid data for ${dateStr}: missing field '${field}'`);
+        return false;
+      }
+    }
+
+    // Check data types
+    if (typeof data.balance !== 'number' || isNaN(data.balance)) {
+      console.warn(`[EODCache] Invalid data for ${dateStr}: balance is not a valid number`);
+      return false;
+    }
+
+    if (typeof data.unrealizedPnL !== 'number' || isNaN(data.unrealizedPnL)) {
+      console.warn(`[EODCache] Invalid data for ${dateStr}: unrealizedPnL is not a valid number`);
+      return false;
+    }
+
+    if (typeof data.stockPrices !== 'object' || data.stockPrices === null) {
+      console.warn(`[EODCache] Invalid data for ${dateStr}: stockPrices is not an object`);
+      return false;
+    }
+
+    if (!Array.isArray(data.positionsOwned)) {
+      console.warn(`[EODCache] Invalid data for ${dateStr}: positionsOwned is not an array`);
+      return false;
+    }
+
+    // Check consistency: positionsOwned should match stockPrices keys
+    const stockPriceKeys = Object.keys(data.stockPrices);
+    const positionsSet = new Set(data.positionsOwned);
+
+    // Allow incomplete data (marked with incomplete flag)
+    if (!data.incomplete) {
+      // For complete data, verify all positions have prices
+      for (const ticker of data.positionsOwned) {
+        if (!(ticker in data.stockPrices)) {
+          console.warn(`[EODCache] Invalid data for ${dateStr}: position '${ticker}' missing from stockPrices`);
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -79,14 +192,24 @@ class EODCacheManager {
   }
 
   /**
-   * Save cache to localStorage
+   * Save cache to IndexedDB
    * @private
    */
-  _saveCache() {
+  async _saveCache() {
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(this.cache));
+      await storage.setItem(CACHE_KEY, this.cache);
     } catch (error) {
       console.error('Error saving EOD cache:', error);
+    }
+  }
+
+  /**
+   * Ensure cache is initialized
+   * @private
+   */
+  _ensureInitialized() {
+    if (!this.initialized || !this.cache) {
+      throw new Error('EODCacheManager not initialized. Call init() first.');
     }
   }
 
@@ -247,8 +370,9 @@ class EODCacheManager {
   }
 
   /**
-   * Invalidate (mark as incomplete) days from a specific date forward
+   * Invalidate (delete) days from a specific date forward
    * Used when past trades change and we need to recalculate
+   * Deletes days entirely so they'll be recalculated from scratch
    * @param {string} startDate - Date to start invalidating from
    * @returns {number} Number of days invalidated
    */
@@ -261,13 +385,13 @@ class EODCacheManager {
 
     for (const dateStr of allDays) {
       if (this.cache.days[dateStr]) {
-        this.cache.days[dateStr].incomplete = true;
+        delete this.cache.days[dateStr];
         invalidatedCount++;
       }
     }
 
     this._saveCache();
-    console.log(`Invalidated ${invalidatedCount} days from ${startDate}`);
+    console.log(`Invalidated (deleted) ${invalidatedCount} days from ${startDate}`);
 
     return invalidatedCount;
   }
@@ -311,10 +435,10 @@ class EODCacheManager {
    * Delete EOD data for a specific date
    * @param {string} dateStr - Date in 'YYYY-MM-DD' format
    */
-  deleteDayData(dateStr) {
+  async deleteDayData(dateStr) {
     if (this.cache.days[dateStr]) {
       delete this.cache.days[dateStr];
-      this._saveCache();
+      await this._saveCache();
       console.log(`Deleted EOD data for ${dateStr}`);
     }
   }
@@ -322,18 +446,18 @@ class EODCacheManager {
   /**
    * Clear all EOD data (reset cache)
    */
-  clearAllData() {
+  async clearAllData() {
     this.cache = this._createEmptyCache();
-    this._saveCache();
+    await this._saveCache();
     console.log('Cleared all EOD cache data');
   }
 
   /**
    * Cleanup old data (delete data older than specified days)
    * @param {number} daysToKeep - Number of days to keep (default: 730 = 2 years)
-   * @returns {number} Number of days deleted
+   * @returns {Promise<number>} Number of days deleted
    */
-  cleanupOldData(daysToKeep = 730) {
+  async cleanupOldData(daysToKeep = 730) {
     const today = formatDate(new Date());
     const cutoffDate = formatDate(new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000));
 
@@ -347,7 +471,7 @@ class EODCacheManager {
     }
 
     if (deletedCount > 0) {
-      this._saveCache();
+      await this._saveCache();
       console.log(`Cleaned up ${deletedCount} days of EOD data older than ${cutoffDate}`);
     }
 
@@ -387,14 +511,14 @@ class EODCacheManager {
    * Import cache data (for debugging or restore)
    * @param {Object} cacheData - Cache data to import
    */
-  importData(cacheData) {
+  async importData(cacheData) {
     if (cacheData.version !== CACHE_VERSION) {
       console.error('Cannot import cache: version mismatch');
       return false;
     }
 
     this.cache = cacheData;
-    this._saveCache();
+    await this._saveCache();
     console.log('Imported EOD cache data');
     return true;
   }

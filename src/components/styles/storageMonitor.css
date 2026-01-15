@@ -1,0 +1,184 @@
+/* Storage Monitor - Neon-themed storage usage display */
+
+.storage-monitor {
+  background: linear-gradient(145deg, #0a0a0a 0%, #000000 100%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.storage-monitor__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.storage-monitor__label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+.storage-monitor__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+
+/* Progress Bar */
+.storage-monitor__bar-container {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.storage-monitor__bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);
+  border-radius: 4px;
+  transition: width 0.6s ease, background 0.3s ease;
+  box-shadow:
+    0 0 8px rgba(139, 92, 246, 0.6),
+    0 0 16px rgba(139, 92, 246, 0.3);
+}
+
+/* Warning states */
+.storage-monitor__bar.warning {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+  box-shadow:
+    0 0 8px rgba(245, 158, 11, 0.6),
+    0 0 16px rgba(245, 158, 11, 0.3);
+}
+
+.storage-monitor__bar.critical {
+  background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
+  box-shadow:
+    0 0 8px rgba(239, 68, 68, 0.6),
+    0 0 16px rgba(239, 68, 68, 0.3);
+  animation: pulse-critical 2s ease-in-out infinite;
+}
+
+@keyframes pulse-critical {
+  0%, 100% {
+    box-shadow:
+      0 0 8px rgba(239, 68, 68, 0.6),
+      0 0 16px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 12px rgba(239, 68, 68, 0.8),
+      0 0 24px rgba(239, 68, 68, 0.5);
+  }
+}
+
+/* Warning Message */
+.storage-monitor__warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--border-radius-sm);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  color: #fbbf24;
+}
+
+.storage-monitor__warning svg {
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
+.storage-monitor__warning.critical {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.storage-monitor__warning.critical svg {
+  color: #ef4444;
+}
+
+/* Breakdown */
+.storage-monitor__breakdown {
+  margin-top: var(--space-3);
+}
+
+.storage-monitor__breakdown-toggle {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+  user-select: none;
+  list-style: none;
+}
+
+.storage-monitor__breakdown-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.storage-monitor__breakdown-toggle::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: var(--space-2);
+  transition: transform 0.2s ease;
+  font-size: 10px;
+}
+
+.storage-monitor__breakdown[open] .storage-monitor__breakdown-toggle::before {
+  transform: rotate(90deg);
+}
+
+.storage-monitor__breakdown-toggle:hover {
+  color: var(--text-primary);
+}
+
+.storage-monitor__breakdown-content {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.storage-monitor__breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) 0;
+  font-size: var(--text-xs);
+}
+
+.storage-monitor__breakdown-name {
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.storage-monitor__breakdown-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.storage-monitor__breakdown-bar {
+  width: 40px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.storage-monitor__breakdown-bar-fill {
+  height: 100%;
+  background: rgba(139, 92, 246, 0.6);
+  border-radius: 2px;
+}

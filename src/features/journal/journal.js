@@ -273,8 +273,8 @@ class Journal {
       pnl: null,
       thesis: null,
       wizardComplete: false,
-      wizardSkipped: [],
-      company: companyData // Store company data in entry
+      wizardSkipped: []
+      // Note: Company data is cached separately and looked up by ticker
     };
 
     const newEntry = state.addJournalEntry(entry);

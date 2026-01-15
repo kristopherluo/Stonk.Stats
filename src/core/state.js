@@ -4,6 +4,8 @@
 
 import { debounce } from './utils.js';
 import { calculateRealizedPnL, getTradeRealizedPnL } from './utils/tradeCalculations.js';
+import { compressTradeNotes, decompressTradeNotes } from '../utils/compression.js';
+import { storage } from '../utils/storage.js';
 
 class AppState {
   constructor() {
@@ -340,19 +342,31 @@ class AppState {
   }
 
   // Persistence
-  saveSettings() {
+  async saveSettings() {
     try {
-      localStorage.setItem('riskCalcSettings', JSON.stringify(this.state.settings));
+      await storage.setItem('riskCalcSettings', this.state.settings);
     } catch (e) {
       console.error('Failed to save settings:', e);
     }
   }
 
-  loadSettings() {
+  /**
+   * Save all state immediately (bypasses debouncing)
+   * Used for critical operations like clear all data
+   */
+  async saveAllImmediate() {
+    await Promise.all([
+      this.saveSettings(),
+      this._saveJournalImmediate(),
+      this._saveCashFlowImmediate(),
+      this._saveJournalMetaImmediate()
+    ]);
+  }
+
+  async loadSettings() {
     try {
-      const saved = localStorage.getItem('riskCalcSettings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const parsed = await storage.getItem('riskCalcSettings');
+      if (parsed) {
         // Replace settings object entirely to ensure all properties are reset
         this.state.settings = {
           startingAccountSize: parsed.startingAccountSize ?? 10000,
@@ -376,19 +390,22 @@ class AppState {
   }
 
   // Private method: immediate save (called by debounced function)
-  _saveJournalImmediate() {
+  async _saveJournalImmediate() {
     try {
-      localStorage.setItem('riskCalcJournal', JSON.stringify(this.state.journal.entries));
+      // Compress notes before saving
+      const compressedEntries = this.state.journal.entries.map(trade => compressTradeNotes(trade));
+      await storage.setItem('riskCalcJournal', compressedEntries);
     } catch (e) {
       console.error('Failed to save journal:', e);
     }
   }
 
-  loadJournal() {
+  async loadJournal() {
     try {
-      const saved = localStorage.getItem('riskCalcJournal');
-      if (saved) {
-        this.state.journal.entries = JSON.parse(saved);
+      const entries = await storage.getItem('riskCalcJournal');
+      if (entries) {
+        // Decompress notes after loading
+        this.state.journal.entries = entries.map(trade => decompressTradeNotes(trade));
         // realizedPnL and currentSize are now computed properties - no manual calculation needed
       }
     } catch (e) {
@@ -402,19 +419,18 @@ class AppState {
   }
 
   // Private method: immediate save (called by debounced function)
-  _saveCashFlowImmediate() {
+  async _saveCashFlowImmediate() {
     try {
-      localStorage.setItem('riskCalcCashFlow', JSON.stringify(this.state.cashFlow));
+      await storage.setItem('riskCalcCashFlow', this.state.cashFlow);
     } catch (e) {
       console.error('Failed to save cash flow:', e);
     }
   }
 
-  loadCashFlow() {
+  async loadCashFlow() {
     try {
-      const saved = localStorage.getItem('riskCalcCashFlow');
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const parsed = await storage.getItem('riskCalcCashFlow');
+      if (parsed) {
         this.state.cashFlow = {
           transactions: parsed.transactions || [],
           totalDeposits: parsed.totalDeposits || 0,
@@ -447,19 +463,18 @@ class AppState {
   }
 
   // Private method: immediate save (called by debounced function)
-  _saveJournalMetaImmediate() {
+  async _saveJournalMetaImmediate() {
     try {
-      localStorage.setItem('riskCalcJournalMeta', JSON.stringify(this.state.journalMeta));
+      await storage.setItem('riskCalcJournalMeta', this.state.journalMeta);
     } catch (e) {
       console.error('Failed to save journal meta:', e);
     }
   }
 
-  loadJournalMeta() {
+  async loadJournalMeta() {
     try {
-      const saved = localStorage.getItem('riskCalcJournalMeta');
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const parsed = await storage.getItem('riskCalcJournalMeta');
+      if (parsed) {
         // Deep merge to preserve defaults for missing keys
         this.state.journalMeta = {
           settings: {

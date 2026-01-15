@@ -792,6 +792,10 @@ class JournalView {
     const isClosed = trade.status === 'closed';
     const isActive = !isClosed;
 
+    // Get company data from cache
+    const companyData = this.getCompanyData(trade.ticker);
+    const companySummary = companyData?.summary || companyData?.description || 'Loading company information...';
+
     return `
       <div class="journal-row-details">
         <div class="journal-row-details__section journal-row-details__section--chart">
@@ -805,7 +809,7 @@ class JournalView {
           <div class="journal-info-box">
             <div class="journal-info-box__section" data-company-summary-section="${trade.id}">
               <div class="journal-info-box__label">Company Summary</div>
-              <div class="journal-info-box__content" data-company-summary="${trade.id}">${trade.company?.summary || trade.company?.description || 'Loading company information...'}</div>
+              <div class="journal-info-box__content" data-company-summary="${trade.id}">${companySummary}</div>
             </div>
             <div class="journal-info-box__section">
               <div class="journal-info-box__label">Notes</div>
@@ -1455,9 +1459,21 @@ class JournalView {
     }
   }
 
+  /**
+   * Get company data for a ticker from cache
+   * @param {string} ticker - Stock ticker symbol
+   * @returns {Object|null} Company data or null if not cached
+   */
+  getCompanyData(ticker) {
+    return priceTracker.getCachedCompanyData(ticker);
+  }
+
   async fetchAndDisplayCompanySummary(trade) {
-    // If summary or description already exists, no need to fetch
-    if (trade.company?.summary || trade.company?.description) {
+    // Get company data from cache
+    const companyData = this.getCompanyData(trade.ticker);
+
+    // If summary or description already exists in cache, no need to fetch
+    if (companyData?.summary || companyData?.description) {
       return;
     }
 
@@ -1478,9 +1494,9 @@ class JournalView {
     try {
       let cleanSummary = '';
 
-      // First check if Finnhub description exists in company data
-      if (trade.company?.description) {
-        cleanSummary = trade.company.description.trim();
+      // First check if Finnhub description exists in cached company data
+      if (companyData?.description) {
+        cleanSummary = companyData.description.trim();
       } else {
         // If no Finnhub description, try Alpha Vantage
         const overview = await priceTracker.fetchCompanySummary(trade.ticker);
@@ -1491,29 +1507,23 @@ class JournalView {
       }
 
       if (cleanSummary) {
-        // Only add summary to existing company data, don't overwrite industry
-        // Industry should come from Finnhub (when position was created)
-        const tradeIndex = state.journal.entries.findIndex(t => t.id === trade.id);
-        if (tradeIndex !== -1) {
-          const existingCompany = state.journal.entries[tradeIndex].company || {};
-
-          // Preserve existing industry from Finnhub, only add summary
-          state.journal.entries[tradeIndex].company = {
-            ...existingCompany,
-            summary: cleanSummary
-          };
-          state.saveJournal();
-        }
+        // Save summary to cache (merge with existing company data)
+        const existingCompany = this.getCompanyData(trade.ticker) || {};
+        priceTracker.saveCompanyDataToCache(trade.ticker, {
+          ...existingCompany,
+          summary: cleanSummary
+        });
 
         // Display the summary
         summaryContainer.textContent = cleanSummary;
         summaryContainer.style.fontStyle = 'normal';
         summaryContainer.style.color = '';
       } else {
-        // No description available - show company info we do have
+        // No description available - show company info we do have from cache
+        const cachedCompany = this.getCompanyData(trade.ticker);
         const companyInfo = [];
-        if (trade.company?.name) companyInfo.push(trade.company.name);
-        if (trade.company?.industry) companyInfo.push(trade.company.industry);
+        if (cachedCompany?.name) companyInfo.push(cachedCompany.name);
+        if (cachedCompany?.industry) companyInfo.push(cachedCompany.industry);
 
         if (companyInfo.length > 0) {
           summaryContainer.textContent = companyInfo.join(' • ');
@@ -1527,10 +1537,11 @@ class JournalView {
       }
     } catch (error) {
       console.error('Error fetching company summary:', error);
-      // Show company info we have instead of hiding on error
+      // Show company info we have from cache instead of hiding on error
+      const cachedCompany = this.getCompanyData(trade.ticker);
       const companyInfo = [];
-      if (trade.company?.name) companyInfo.push(trade.company.name);
-      if (trade.company?.industry) companyInfo.push(trade.company.industry);
+      if (cachedCompany?.name) companyInfo.push(cachedCompany.name);
+      if (cachedCompany?.industry) companyInfo.push(cachedCompany.industry);
 
       if (companyInfo.length > 0) {
         summaryContainer.textContent = companyInfo.join(' • ');

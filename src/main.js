@@ -17,20 +17,26 @@ import { stats } from './features/stats/stats.js';
 import { equityChart } from './features/stats/statsChart.js';
 import { positionsView } from './features/positions/positionsView.js';
 import { journalView } from './features/journal/journalView.js';
+import { historicalPricesBatcher } from './features/stats/HistoricalPricesBatcher.js';
+import { formatDate } from './utils/marketHours.js';
 
 class App {
   constructor() {
     this.init();
   }
 
-  init() {
+  async init() {
     console.log('Initializing TradeDeck...');
 
-    // Initialize settings FIRST (loads saved data before theme.init saves defaults)
-    settings.init();
+    // Initialize settings FIRST (loads saved data from IndexedDB)
+    await settings.init();
+
+    // Proactive cleanup: 30-day hot window for historical prices
+    // Runs on startup to keep storage under control
+    this.runProactiveCleanup();
 
     // Initialize price tracker
-    priceTracker.init();
+    await priceTracker.init();
 
     // Auto-fetch prices on load if we have open trades and cache is empty/stale
     const openTrades = state.journal.entries.filter(t => t.status === 'open' || t.status === 'trimmed');
@@ -117,6 +123,33 @@ class App {
     this.setupGlobalFunctions();
 
     console.log('TradeDeck initialized successfully');
+  }
+
+  /**
+   * Run proactive cleanup of historical prices cache
+   * Keeps prices for last 30 days + any tickers with open/trimmed positions
+   * Deletes everything else to prevent storage quota issues
+   */
+  runProactiveCleanup() {
+    try {
+      // Calculate cutoff date (30 days ago)
+      const today = new Date();
+      const cutoffDate = new Date(today);
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      const cutoffDateStr = formatDate(cutoffDate);
+
+      // Run cleanup with all trades
+      const removedCount = historicalPricesBatcher.cleanupPricesOlderThan(
+        cutoffDateStr,
+        state.journal.entries
+      );
+
+      if (removedCount > 0) {
+        console.log(`[Startup] Hot window cleanup complete: removed ${removedCount} old price data points`);
+      }
+    } catch (error) {
+      console.error('[Startup] Error during proactive cleanup:', error);
+    }
   }
 
   setupGlobalEvents() {

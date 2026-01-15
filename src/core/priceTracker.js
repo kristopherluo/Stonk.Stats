@@ -6,6 +6,7 @@
 import { state } from './state.js';
 import { sleep } from './utils.js';
 import * as marketHours from '../utils/marketHours.js';
+import { storage } from '../utils/storage.js';
 
 const CACHE_KEY = 'riskCalcPriceCache';
 
@@ -16,19 +17,19 @@ export const priceTracker = {
   _fetchInProgress: false,
   _fetchPromise: null,
 
-  init() {
-    // Load API key from settings
-    this.apiKey = localStorage.getItem('finnhubApiKey') || '';
+  async init() {
+    // Load API key from IndexedDB
+    this.apiKey = (await storage.getItem('finnhubApiKey')) || '';
 
-    // Load price cache from localStorage
-    this.loadCache();
+    // Load price cache from IndexedDB
+    await this.loadCache();
   },
 
-  loadCache() {
+  async loadCache() {
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
+      const cached = await storage.getItem('riskCalcPriceCache');
       if (cached) {
-        const { prices, date, tradingDay } = JSON.parse(cached);
+        const { prices, date, tradingDay } = cached;
         this.lastFetchDate = new Date(date);
 
         // Check if cache is still valid (same trading day)
@@ -43,15 +44,15 @@ export const priceTracker = {
     }
   },
 
-  saveCache() {
+  async saveCache() {
     try {
       const prices = Object.fromEntries(this.cache);
       const now = new Date();
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
+      await storage.setItem('riskCalcPriceCache', {
         prices,
         date: now.toISOString(),
         tradingDay: marketHours.getTradingDay(now) // Store trading day for proper expiry
-      }));
+      });
     } catch (e) {
       console.error('Failed to save price cache:', e);
     }
@@ -111,13 +112,12 @@ export const priceTracker = {
   },
 
   // Get cached company data
-  getCachedCompanyData(ticker) {
+  async getCachedCompanyData(ticker) {
     try {
-      const cache = localStorage.getItem('companyDataCache');
+      const cache = await storage.getItem('companyDataCache');
       if (!cache) return null;
 
-      const parsed = JSON.parse(cache);
-      const data = parsed[ticker.toUpperCase()];
+      const data = cache[ticker.toUpperCase()];
 
       if (data && data.cachedAt) {
         // Cache expires after 30 days
@@ -137,17 +137,17 @@ export const priceTracker = {
   },
 
   // Save company data to cache
-  saveCompanyDataToCache(ticker, data) {
+  async saveCompanyDataToCache(ticker, data) {
     try {
-      const cache = localStorage.getItem('companyDataCache');
-      const parsed = cache ? JSON.parse(cache) : {};
+      const cache = await storage.getItem('companyDataCache');
+      const parsed = cache || {};
 
       parsed[ticker.toUpperCase()] = {
         ...data,
         cachedAt: Date.now()
       };
 
-      localStorage.setItem('companyDataCache', JSON.stringify(parsed));
+      await storage.setItem('companyDataCache', parsed);
     } catch (e) {
       console.error('Error saving company data cache:', e);
     }
@@ -209,7 +209,7 @@ export const priceTracker = {
    * Returns: { summary: string, name: string, sector: string, industry: string }
    */
   async fetchCompanySummary(ticker) {
-    const alphaVantageKey = localStorage.getItem('alphaVantageApiKey');
+    const alphaVantageKey = await storage.getItem('alphaVantageApiKey');
 
     if (!alphaVantageKey) {
       throw new Error('Alpha Vantage API key not configured. Add it in Settings to fetch company summaries.');
@@ -278,7 +278,7 @@ export const priceTracker = {
 
     // Save cache after fetching all prices
     this.lastFetchDate = new Date();
-    this.saveCache();
+    await this.saveCache();
 
     return results;
   },
@@ -349,9 +349,9 @@ export const priceTracker = {
     };
   },
 
-  setApiKey(key) {
+  async setApiKey(key) {
     this.apiKey = key;
-    localStorage.setItem('finnhubApiKey', key);
+    await storage.setItem('finnhubApiKey', key);
   },
 
   getLastFetchTime() {
@@ -368,7 +368,7 @@ export const priceTracker = {
    * @returns {Promise<Array>} Array of candle data {time, open, high, low, close}
    */
   async fetchHistoricalCandles(ticker, entryDate, daysBack = 365, daysForward = 90) {
-    const twelveDataKey = localStorage.getItem('twelveDataApiKey');
+    const twelveDataKey = await storage.getItem('twelveDataApiKey');
     if (!twelveDataKey) {
       throw new Error('Twelve Data API key not configured. Add it in Settings to view charts.');
     }

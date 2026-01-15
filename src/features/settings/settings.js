@@ -3,14 +3,16 @@
  */
 
 import { state } from '../../core/state.js';
-import { parseNumber, formatCurrency, formatWithCommas, initFlatpickr, getCurrentWeekday, restrictToNumberInput } from '../../core/utils.js';
+import { parseNumber, formatCurrency, formatWithCommas, initFlatpickr, getCurrentWeekday, restrictToNumberInput, formatDate } from '../../core/utils.js';
 import { showToast } from '../../components/ui/ui.js';
 import { dataManager } from '../../core/dataManager.js';
 import { clearDataModal } from '../../components/modals/clearDataModal.js';
 import { priceTracker } from '../../core/priceTracker.js';
-import { historicalPrices } from '../../core/historicalPrices.js';
 import { historicalPricesBatcher } from '../stats/HistoricalPricesBatcher.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
+import { getStorageUsage, formatBytes, getStorageBreakdownPercent } from '../../utils/storageMonitor.js';
+import { storage } from '../../utils/storage.js';
+import eodCacheManager from '../../core/eodCacheManager.js';
 
 class Settings {
   constructor() {
@@ -22,12 +24,13 @@ class Settings {
     this.previousValidAccountSize = null;
   }
 
-  init() {
+  async init() {
     this.cacheElements();
     this.bindEvents();
     this.initializeDatePickers();
     this.setupNumberRestrictions();
-    this.loadAndApply();
+    await this.loadAndApply();
+    await this.updateStorageMonitor();
 
     // Listen for account changes
     state.on('accountSizeChanged', (size) => {
@@ -219,8 +222,8 @@ class Settings {
 
     // Finnhub API Key
     if (this.elements.finnhubApiKey && this.elements.finnhubApiKeyBtn) {
-      const saveApiKey = (apiKey) => {
-        priceTracker.setApiKey(apiKey);
+      const saveApiKey = async (apiKey) => {
+        await priceTracker.setApiKey(apiKey);
         if (apiKey) {
           // Update button to active state
           this.setApiKeyButtonActive(this.elements.finnhubApiKeyBtn);
@@ -251,10 +254,9 @@ class Settings {
 
     // Twelve Data API Key
     if (this.elements.twelveDataApiKey && this.elements.twelveDataApiKeyBtn) {
-      const saveTwelveDataKey = (apiKey) => {
-        localStorage.setItem('twelveDataApiKey', apiKey);
-        historicalPrices.setApiKey(apiKey);
-        historicalPricesBatcher.setApiKey(apiKey); // Also set for new batcher
+      const saveTwelveDataKey = async (apiKey) => {
+        await storage.setItem('twelveDataApiKey', apiKey);
+        historicalPricesBatcher.setApiKey(apiKey);
         if (apiKey) {
           // Update button to active state
           this.setApiKeyButtonActive(this.elements.twelveDataApiKeyBtn);
@@ -285,8 +287,8 @@ class Settings {
 
     // Alpha Vantage API Key
     if (this.elements.alphaVantageApiKey && this.elements.alphaVantageApiKeyBtn) {
-      const saveAlphaVantageKey = (apiKey) => {
-        localStorage.setItem('alphaVantageApiKey', apiKey);
+      const saveAlphaVantageKey = async (apiKey) => {
+        await storage.setItem('alphaVantageApiKey', apiKey);
         if (apiKey) {
           // Update button to active state
           this.setApiKeyButtonActive(this.elements.alphaVantageApiKeyBtn);
@@ -391,12 +393,16 @@ class Settings {
     restrictToNumberInput(this.elements.withdrawAmount, true);
   }
 
-  loadAndApply() {
-    // Load saved settings
-    state.loadSettings();
-    state.loadJournal();
-    state.loadJournalMeta();
-    state.loadCashFlow();
+  async loadAndApply() {
+    // Initialize async storage managers
+    await eodCacheManager.init();
+    await historicalPricesBatcher.init();
+
+    // Load saved settings (async with IndexedDB)
+    await state.loadSettings();
+    await state.loadJournal();
+    await state.loadJournalMeta();
+    await state.loadCashFlow();
 
     // Apply theme
     const theme = state.settings.theme || 'dark';
@@ -413,28 +419,27 @@ class Settings {
     }
 
     // Load API keys
-    const finnhubKey = localStorage.getItem('finnhubApiKey') || '';
+    const finnhubKey = (await storage.getItem('finnhubApiKey')) || '';
     if (this.elements.finnhubApiKey) {
       this.elements.finnhubApiKey.value = finnhubKey;
     }
     // Set Finnhub key in priceTracker and activate button if key exists
     if (finnhubKey) {
-      priceTracker.setApiKey(finnhubKey);
+      await priceTracker.setApiKey(finnhubKey);
       this.setApiKeyButtonActive(this.elements.finnhubApiKeyBtn);
     }
 
-    const twelveDataKey = localStorage.getItem('twelveDataApiKey') || '';
+    const twelveDataKey = (await storage.getItem('twelveDataApiKey')) || '';
     if (this.elements.twelveDataApiKey) {
       this.elements.twelveDataApiKey.value = twelveDataKey;
     }
-    // Load API key into historicalPrices and batcher
+    // Load API key into batcher
     if (twelveDataKey) {
-      historicalPrices.setApiKey(twelveDataKey);
-      historicalPricesBatcher.setApiKey(twelveDataKey); // Also set for new batcher
+      historicalPricesBatcher.setApiKey(twelveDataKey);
       this.setApiKeyButtonActive(this.elements.twelveDataApiKeyBtn);
     }
 
-    const alphaVantageKey = localStorage.getItem('alphaVantageApiKey') || '';
+    const alphaVantageKey = (await storage.getItem('alphaVantageApiKey')) || '';
     if (this.elements.alphaVantageApiKey) {
       this.elements.alphaVantageApiKey.value = alphaVantageKey;
     }
@@ -530,22 +535,18 @@ class Settings {
   }
 
   updateAccountDisplay(size) {
-    // Use computed properties from state
-    const starting = state.settings.startingAccountSize;
-    const realizedPnL = state.account.realizedPnL;
-    const cashFlow = state.getCashFlowNet();
+    // Use shared account balance calculator (same logic as Stats page)
+    const currentPrices = priceTracker.getPricesAsObject();
 
-    // Calculate unrealized P&L
-    let unrealizedPnL = 0;
-    const activeTrades = (state.journal?.entries || []).filter(e => e.status === 'open' || e.status === 'trimmed');
-    for (const trade of activeTrades) {
-      const pnl = priceTracker.calculateUnrealizedPnL(trade);
-      if (pnl) {
-        unrealizedPnL += pnl.unrealizedPnL;
-      }
-    }
+    const result = accountBalanceCalculator.calculateCurrentBalance({
+      startingBalance: state.settings.startingAccountSize,
+      allTrades: state.journal.entries,
+      cashFlowTransactions: state.cashFlow.transactions,
+      currentPrices
+    });
 
-    const totalAccount = starting + realizedPnL + unrealizedPnL + cashFlow;
+    const totalAccount = result.balance;
+    const unrealizedPnL = result.unrealizedPnL;
 
     if (this.elements.headerAccountValue) {
       const newText = formatCurrency(totalAccount);
@@ -908,6 +909,98 @@ class Settings {
         'Withdrawal amount must be greater than 0'
       );
     }
+  }
+  /**
+   * Update storage monitor display
+   */
+  async updateStorageMonitor() {
+    const usage = await getStorageUsage();
+    const breakdown = await getStorageBreakdownPercent();
+
+    // Update usage text
+    const usageText = document.getElementById('storageUsageText');
+    if (usageText) {
+      usageText.textContent = `${formatBytes(usage.totalUsed)} / ${formatBytes(usage.limit)} (${usage.percentUsed.toFixed(1)}%)`;
+    }
+
+    // Update progress bar
+    const bar = document.getElementById('storageBar');
+    if (bar) {
+      bar.style.width = `${Math.min(usage.percentUsed, 100)}%`;
+      bar.className = 'storage-monitor__bar';
+      if (usage.warningLevel === 'warning') {
+        bar.classList.add('warning');
+      } else if (usage.warningLevel === 'critical') {
+        bar.classList.add('critical');
+      }
+    }
+
+    // Update warning
+    const warning = document.getElementById('storageWarning');
+    const warningText = document.getElementById('storageWarningText');
+    if (warning && warningText) {
+      if (usage.warningLevel !== 'safe') {
+        warning.style.display = 'flex';
+        if (usage.warningLevel === 'critical') {
+          warning.classList.add('critical');
+          warningText.textContent = 'Storage critically low! Clear old data to free up space.';
+        } else {
+          warning.classList.remove('critical');
+          warningText.textContent = 'Storage usage is high. Consider clearing old price data.';
+        }
+      } else {
+        warning.style.display = 'none';
+      }
+    }
+
+    // Update breakdown
+    const breakdownEl = document.getElementById('storageBreakdown');
+    if (breakdownEl) {
+      breakdownEl.innerHTML = Object.entries(breakdown.breakdown)
+        .filter(([key, data]) => data.bytes > 0)
+        .sort((a, b) => b[1].bytes - a[1].bytes)
+        .map(([key, data]) => `
+          <div class="storage-monitor__breakdown-item">
+            <span class="storage-monitor__breakdown-name">${key}</span>
+            <div class="storage-monitor__breakdown-value">
+              <span>${data.formatted}</span>
+              <div class="storage-monitor__breakdown-bar">
+                <div class="storage-monitor__breakdown-bar-fill" style="width: ${data.percent}%"></div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+    }
+
+    // Bind clear old data button
+    const clearBtn = document.getElementById('clearOldDataBtn');
+    if (clearBtn && !clearBtn.dataset.bound) {
+      clearBtn.dataset.bound = 'true';
+      clearBtn.addEventListener('click', () => this.handleClearOldData());
+    }
+  }
+
+  /**
+   * Handle clear old data button click
+   */
+  async handleClearOldData() {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 30);
+    const cutoffDateStr = formatDate(cutoffDate);
+
+    const removedCount = historicalPricesBatcher.cleanupPricesOlderThan(
+      cutoffDateStr,
+      state.journal.entries
+    );
+
+    if (removedCount > 0) {
+      showToast(`Cleaned up ${removedCount} old price data points`, 'success');
+    } else {
+      showToast('No old price data to clean up', 'info');
+    }
+
+    // Update storage display
+    await this.updateStorageMonitor();
   }
 }
 

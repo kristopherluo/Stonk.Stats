@@ -9,12 +9,13 @@
  */
 
 import { state } from '../../core/state.js';
-import { sleep } from '../../core/utils.js';
+import { sleep, getCurrentWeekday } from '../../core/utils.js';
 import { historicalPricesBatcher } from './HistoricalPricesBatcher.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
 import * as marketHours from '../../utils/marketHours.js';
 import { priceTracker } from '../../core/priceTracker.js';
+import { getTradesOpenOnDate, getTradeEntryDateString } from '../../utils/tradeUtils.js';
 
 class EquityCurveManager {
   constructor() {
@@ -37,7 +38,7 @@ class EquityCurveManager {
     try {
       // Determine date range
       const startDate = filterStartDate || this._getEarliestTradeDate();
-      const endDate = filterEndDate || marketHours.formatDate(new Date());
+      const endDate = filterEndDate || marketHours.formatDate(getCurrentWeekday());
 
       if (!startDate) {
         // No trades yet
@@ -49,13 +50,16 @@ class EquityCurveManager {
       await this._backfillIncompleteDays();
 
       // Check for stale cache BEFORE finding missing days
-      // If we have open trades but cached data shows 0 unrealized P&L, cache is stale
+      // If we have open trades but cached data shows 0 unrealized P&L AND no positions owned, cache is stale
       if (state.journal.entries.some(t => t.status === 'open' || t.status === 'trimmed')) {
         const sampleDate = startDate;
         const cachedData = eodCacheManager.getEODData(sampleDate);
 
-        if (cachedData && cachedData.unrealizedPnL === 0) {
-          console.warn('[EquityCurve] Stale cache detected, clearing and refetching...');
+        // Only consider cache stale if BOTH conditions are true:
+        // 1. unrealizedPnL is 0 (could be legitimate break-even)
+        // 2. positionsOwned is empty (definitely wrong if we have open trades)
+        if (cachedData && cachedData.unrealizedPnL === 0 && (!cachedData.positionsOwned || cachedData.positionsOwned.length === 0)) {
+          console.warn('[EquityCurve] Stale cache detected (no positions but have open trades), clearing and refetching...');
           localStorage.removeItem('eodCache');
         }
       }
@@ -88,7 +92,7 @@ class EquityCurveManager {
    */
   async buildEquityCurveIncremental(onProgress) {
 
-    const endDate = marketHours.formatDate(new Date());
+    const endDate = marketHours.formatDate(getCurrentWeekday());
     const startDate = this._getEarliestTradeDate();
 
     if (!startDate) {
@@ -154,7 +158,7 @@ class EquityCurveManager {
   async waterfallUpdate(startDate) {
     console.log(`[EquityCurve] Waterfall updating from ${startDate}`);
 
-    const endDate = marketHours.formatDate(new Date());
+    const endDate = marketHours.formatDate(getCurrentWeekday());
 
     // Get all days that need recalculation
     const daysToUpdate = marketHours.getBusinessDaysBetween(startDate, endDate);
@@ -253,7 +257,7 @@ class EquityCurveManager {
   _buildCurveFromEODCache(startDate, endDate) {
     const curve = {};
     const businessDays = marketHours.getBusinessDaysBetween(startDate, endDate);
-    const todayStr = marketHours.formatDate(new Date());
+    const todayStr = marketHours.formatDate(getCurrentWeekday());
 
     for (const dateStr of businessDays) {
       const point = this._getCurvePointForDate(dateStr, todayStr);
@@ -421,16 +425,26 @@ class EquityCurveManager {
       await historicalPricesBatcher.batchFetchPrices(tickersToFetch);
     }
 
-    // Calculate and save EOD data for each missing day
+    // ATOMIC SAVE: Calculate all days in memory first, then save all at once
+    const tempEODData = {};
+
     for (const day of missingDays) {
       const openTickers = tickersByDay[day];
       const eodData = await this._calculateEODForDay(day, openTickers);
 
-      eodCacheManager.saveEODSnapshot(day, {
+      // Store in temporary object instead of saving immediately
+      tempEODData[day] = {
         ...eodData,
         source: 'twelve_data'
-      });
+      };
     }
+
+    // Only after ALL days are calculated successfully, save them all at once
+    for (const day in tempEODData) {
+      eodCacheManager.saveEODSnapshot(day, tempEODData[day]);
+    }
+
+    console.log(`[EquityCurve] Atomic save: saved ${Object.keys(tempEODData).length} days to cache`);
   }
 
   /**
@@ -517,15 +531,10 @@ class EquityCurveManager {
 
   /**
    * Get trades that were open on a specific date
-   * Includes trades that closed ON this date (need EOD price for that day)
+   * Trades that close ON this date are considered "closed" (we have exit price, not EOD price)
    */
   _getTradesOpenOnDate(dateStr) {
-    return state.journal.entries.filter(trade => {
-      const entryDateStr = this._getEntryDateString(trade);
-      const enteredBefore = entryDateStr <= dateStr;
-      const notClosedYet = !trade.exitDate || trade.exitDate >= dateStr; // >= to include trades closed on this day
-      return enteredBefore && notClosedYet;
-    });
+    return getTradesOpenOnDate(state.journal.entries, dateStr);
   }
 
   /**
@@ -595,16 +604,7 @@ class EquityCurveManager {
    * Converts timestamp to 'YYYY-MM-DD' format
    */
   _getEntryDateString(trade) {
-    if (!trade.timestamp) return null;
-
-    // If timestamp is already a string in YYYY-MM-DD format, return it
-    if (typeof trade.timestamp === 'string' && trade.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return trade.timestamp.substring(0, 10);
-    }
-
-    // Otherwise convert to Date and format
-    const date = new Date(trade.timestamp);
-    return marketHours.formatDate(date);
+    return getTradeEntryDateString(trade);
   }
 
   /**

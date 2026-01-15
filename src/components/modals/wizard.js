@@ -863,10 +863,10 @@ class TradeWizard {
       // Thesis data
       thesis: this.hasThesisData() ? { ...this.thesis } : null,
       wizardComplete,
-      wizardSkipped: [...this.skippedSteps],
+      wizardSkipped: [...this.skippedSteps]
 
-      // Company data (fetched during validation)
-      company: companyData || null
+      // Note: Company data is cached separately in companyDataCache
+      // and looked up by ticker when displaying trades
     };
 
     // Add to journal

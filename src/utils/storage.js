@@ -1,0 +1,226 @@
+/**
+ * Storage Adapter - Unified storage interface using IndexedDB via localForage
+ * Provides async storage with automatic migration from localStorage
+ */
+
+// Check if localforage is available (loaded via script tag)
+if (typeof localforage === 'undefined') {
+  throw new Error('localforage library not loaded. Make sure the script tag is included in index.html');
+}
+
+// Configure localForage to use IndexedDB
+localforage.config({
+  name: 'StonkStats',
+  version: 1.0,
+  storeName: 'trading_data',
+  description: 'Trading journal and settings storage'
+});
+
+/**
+ * Storage adapter that wraps localForage
+ * Provides async get/set/remove methods
+ */
+class StorageAdapter {
+  constructor() {
+    this.migrated = false;
+    this._migrationPromise = null;  // Promise lock to prevent race conditions
+    this.migrationKeys = [
+      'riskCalcJournal',
+      'riskCalcCashFlow',
+      'riskCalcSettings',
+      'riskCalcJournalMeta',
+      'eodCache',
+      'historicalPriceCache',
+      'companyDataCache',
+      'chartDataCache',
+      'riskCalcPriceCache',
+      'finnhubApiKey',
+      'twelveDataApiKey',
+      'alphaVantageApiKey',
+      'theme'
+    ];
+  }
+
+  /**
+   * Migrate data from localStorage to IndexedDB (one-time operation)
+   * Uses promise lock to prevent race conditions from concurrent calls
+   */
+  async migrateFromLocalStorage() {
+    // Return existing migration promise if already running
+    if (this._migrationPromise) {
+      return this._migrationPromise;
+    }
+
+    // Already migrated
+    if (this.migrated) {
+      return;
+    }
+
+    // Create and cache migration promise
+    this._migrationPromise = this._performMigration();
+
+    try {
+      await this._migrationPromise;
+    } finally {
+      this._migrationPromise = null;
+    }
+  }
+
+  /**
+   * Internal migration implementation
+   * @private
+   */
+  async _performMigration() {
+    try {
+      console.log('[Storage] Checking for localStorage data to migrate...');
+
+      let migratedCount = 0;
+
+      for (const key of this.migrationKeys) {
+        const localValue = localStorage.getItem(key);
+
+        if (localValue !== null) {
+          // Check if already in IndexedDB
+          const indexedValue = await localforage.getItem(key);
+
+          if (indexedValue === null) {
+            // Migrate from localStorage to IndexedDB
+            try {
+              // For JSON strings, parse and store as objects
+              let valueToStore = localValue;
+              try {
+                valueToStore = JSON.parse(localValue);
+              } catch (e) {
+                // Not JSON, store as string
+              }
+
+              await localforage.setItem(key, valueToStore);
+              migratedCount++;
+              console.log(`[Storage] Migrated ${key} to IndexedDB`);
+            } catch (e) {
+              console.error(`[Storage] Failed to migrate ${key}:`, e);
+            }
+          }
+        }
+      }
+
+      if (migratedCount > 0) {
+        console.log(`[Storage] ✅ Migration complete! Migrated ${migratedCount} items to IndexedDB`);
+        console.log('[Storage] localStorage data preserved for backup');
+      } else {
+        console.log('[Storage] No migration needed (IndexedDB already populated or no localStorage data)');
+      }
+
+      this.migrated = true;
+    } catch (error) {
+      console.error('[Storage] Migration error:', error);
+      this.migrated = true; // Don't block app if migration fails
+    }
+  }
+
+  /**
+   * Get an item from storage
+   * @param {string} key - Storage key
+   * @returns {Promise<any>} Value (already parsed if it was JSON)
+   */
+  async getItem(key) {
+    await this.migrateFromLocalStorage();
+
+    try {
+      const value = await localforage.getItem(key);
+      return value;
+    } catch (error) {
+      console.error(`[Storage] Error getting ${key}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Set an item in storage
+   * @param {string} key - Storage key
+   * @param {any} value - Value to store (will be automatically serialized)
+   * @returns {Promise<void>}
+   */
+  async setItem(key, value) {
+    await this.migrateFromLocalStorage();
+
+    try {
+      await localforage.setItem(key, value);
+    } catch (error) {
+      console.error(`[Storage] Error setting ${key}:`, error);
+      throw error; // Re-throw to let caller handle quota errors
+    }
+  }
+
+  /**
+   * Remove an item from storage
+   * @param {string} key - Storage key
+   * @returns {Promise<void>}
+   */
+  async removeItem(key) {
+    await this.migrateFromLocalStorage();
+
+    try {
+      await localforage.removeItem(key);
+    } catch (error) {
+      console.error(`[Storage] Error removing ${key}:`, error);
+    }
+  }
+
+  /**
+   * Clear all items from storage
+   * @returns {Promise<void>}
+   */
+  async clear() {
+    try {
+      await localforage.clear();
+      console.log('[Storage] Cleared all IndexedDB data');
+    } catch (error) {
+      console.error('[Storage] Error clearing storage:', error);
+    }
+  }
+
+  /**
+   * Get all keys in storage
+   * @returns {Promise<string[]>}
+   */
+  async keys() {
+    try {
+      return await localforage.keys();
+    } catch (error) {
+      console.error('[Storage] Error getting keys:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get storage usage statistics
+   * @returns {Promise<Object>} Storage usage info
+   */
+  async getUsage() {
+    try {
+      const keys = await this.keys();
+      let totalSize = 0;
+      const breakdown = {};
+
+      for (const key of keys) {
+        const value = await localforage.getItem(key);
+        const size = new Blob([JSON.stringify(value)]).size;
+        breakdown[key] = size;
+        totalSize += size;
+      }
+
+      return {
+        totalSize,
+        breakdown,
+        keys: keys.length
+      };
+    } catch (error) {
+      console.error('[Storage] Error calculating usage:', error);
+      return { totalSize: 0, breakdown: {}, keys: 0 };
+    }
+  }
+}
+
+// Export singleton instance
+export const storage = new StorageAdapter();

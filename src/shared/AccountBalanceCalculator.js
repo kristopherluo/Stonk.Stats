@@ -16,6 +16,8 @@ import { state } from '../core/state.js';
 import eodCacheManager from '../core/eodCacheManager.js';
 import { calculateRealizedPnL, getTradeRealizedPnL } from '../core/utils/tradeCalculations.js';
 import { formatDate } from '../utils/marketHours.js';
+import { getCashFlowOnDate, getTransactionDateString, getNetCashFlow, getCashFlowUpToDate } from '../utils/cashFlowUtils.js';
+import { getTradesOpenOnDate, getTradeEntryDateString } from '../utils/tradeUtils.js';
 
 class AccountBalanceCalculator {
   /**
@@ -209,9 +211,7 @@ class AccountBalanceCalculator {
    * @private
    */
   _calculateNetCashFlow(transactions) {
-    return transactions.reduce((sum, txn) => {
-      return sum + (txn.type === 'deposit' ? txn.amount : -txn.amount);
-    }, 0);
+    return getNetCashFlow(transactions);
   }
 
   /**
@@ -222,14 +222,7 @@ class AccountBalanceCalculator {
    * @private
    */
   _calculateCashFlowUpToDate(transactions, dateStr) {
-    return transactions
-      .filter(txn => {
-        const txnDateStr = this._getTransactionDateString(txn);
-        return txnDateStr && txnDateStr <= dateStr;
-      })
-      .reduce((sum, txn) => {
-        return sum + (txn.type === 'deposit' ? txn.amount : -txn.amount);
-      }, 0);
+    return getCashFlowUpToDate(transactions, dateStr);
   }
 
   /**
@@ -240,12 +233,7 @@ class AccountBalanceCalculator {
    * @private
    */
   _getTradesOpenOnDate(allTrades, dateStr) {
-    return allTrades.filter(trade => {
-      const entryDateStr = this._getEntryDateString(trade);
-      const enteredBefore = entryDateStr <= dateStr;
-      const notClosedYet = !trade.exitDate || trade.exitDate > dateStr;
-      return enteredBefore && notClosedYet;
-    });
+    return getTradesOpenOnDate(allTrades, dateStr);
   }
 
   /**
@@ -308,9 +296,7 @@ class AccountBalanceCalculator {
    * @returns {number} Net cash flow on this date
    */
   calculateDayCashFlow(transactions, dateStr) {
-    return transactions
-      .filter(t => t.date === dateStr)
-      .reduce((sum, t) => sum + (t.type === 'deposit' ? t.amount : -t.amount), 0);
+    return getCashFlowOnDate(transactions, dateStr);
   }
 
   /**
@@ -362,15 +348,7 @@ class AccountBalanceCalculator {
    * @private
    */
   _getEntryDateString(trade) {
-    if (!trade.timestamp) return null;
-
-    // If timestamp is already a string in YYYY-MM-DD format, return it
-    if (typeof trade.timestamp === 'string' && trade.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return trade.timestamp.substring(0, 10);
-    }
-
-    // Use centralized date formatting
-    return formatDate(new Date(trade.timestamp));
+    return getTradeEntryDateString(trade);
   }
 
   /**
@@ -380,15 +358,7 @@ class AccountBalanceCalculator {
    * @private
    */
   _getTransactionDateString(transaction) {
-    if (!transaction.timestamp) return null;
-
-    // If timestamp is already a string in YYYY-MM-DD format, return it
-    if (typeof transaction.timestamp === 'string' && transaction.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return transaction.timestamp.substring(0, 10);
-    }
-
-    // Use centralized date formatting
-    return formatDate(new Date(transaction.timestamp));
+    return getTransactionDateString(transaction);
   }
 }
 

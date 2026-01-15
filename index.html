@@ -49,6 +49,7 @@
   <link rel="stylesheet" href="src/features/positions/positions.css">
   <link rel="stylesheet" href="src/features/journal/journal.css">
   <link rel="stylesheet" href="src/features/stats/stats.css">
+  <link rel="stylesheet" href="src/components/styles/storageMonitor.css">
   <link rel="stylesheet" href="src/styles/flatpickr-theme.css">
 </head>
 <body>
@@ -728,7 +729,39 @@
       <div class="settings-section">
         <h3 class="settings-section__title">Data Management</h3>
 
-        <div class="btn-group btn-group--vertical">
+        <!-- Storage Monitor -->
+        <div class="storage-monitor" id="storageMonitor">
+          <div class="storage-monitor__header">
+            <span class="storage-monitor__label">Storage Usage</span>
+            <span class="storage-monitor__value" id="storageUsageText">Loading...</span>
+          </div>
+
+          <div class="storage-monitor__bar-container">
+            <div class="storage-monitor__bar" id="storageBar"></div>
+          </div>
+
+          <div class="storage-monitor__warning" id="storageWarning" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span id="storageWarningText"></span>
+          </div>
+
+          <details class="storage-monitor__breakdown">
+            <summary class="storage-monitor__breakdown-toggle">Show Breakdown</summary>
+            <div class="storage-monitor__breakdown-content" id="storageBreakdown">
+              <!-- Populated by JS -->
+            </div>
+          </details>
+
+          <button class="btn btn--ghost btn--sm" id="clearOldDataBtn" style="margin-top: 12px;">
+            Clean Old Price Data (30+ days)
+          </button>
+        </div>
+
+        <div class="btn-group btn-group--vertical" style="margin-top: 20px;">
           <button class="btn btn--secondary" id="exportDataBtn">Export All Data</button>
           <button class="btn btn--secondary" id="importDataBtn">Import Data</button>
           <button class="btn btn--ghost text-danger" id="clearDataBtn">Clear All Data</button>
@@ -1323,6 +1356,8 @@
   <!-- Scripts -->
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

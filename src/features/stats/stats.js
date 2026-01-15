@@ -16,6 +16,7 @@ import { priceTracker } from '../../core/priceTracker.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
 import * as marketHours from '../../utils/marketHours.js';
+import { getTradeEntryDateString } from '../../utils/tradeUtils.js';
 
 class Stats {
   constructor() {
@@ -919,16 +920,7 @@ class Stats {
    * Converts timestamp to 'YYYY-MM-DD' format
    */
   _getEntryDateString(trade) {
-    if (!trade.timestamp) return null;
-
-    // If timestamp is already a string in YYYY-MM-DD format, return it
-    if (typeof trade.timestamp === 'string' && trade.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return trade.timestamp.substring(0, 10);
-    }
-
-    // Otherwise convert to Date and format
-    const date = new Date(trade.timestamp);
-    return marketHours.formatDate(date);
+    return getTradeEntryDateString(trade);
   }
 }
 

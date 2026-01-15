@@ -5,13 +5,24 @@
 
 import { formatDate } from '../../utils/marketHours.js';
 import { sleep } from '../../core/utils.js';
+import { storage } from '../../utils/storage.js';
 
 class HistoricalPricesBatcher {
   constructor() {
     this.cache = {}; // { ticker: { 'YYYY-MM-DD': { open, high, low, close } } }
-    this.loadCache();
+    this.initialized = false;
     this.apiKey = null;
     this.BATCH_SIZE = 8; // Twelve Data free tier supports up to 8 symbols per call
+  }
+
+  /**
+   * Initialize cache (async)
+   */
+  async init() {
+    if (!this.initialized) {
+      await this.loadCache();
+      this.initialized = true;
+    }
   }
 
   setApiKey(key) {
@@ -284,13 +295,13 @@ class HistoricalPricesBatcher {
 
 
   /**
-   * Load cache from localStorage
+   * Load cache from IndexedDB
    */
-  loadCache() {
+  async loadCache() {
     try {
-      const saved = localStorage.getItem('historicalPriceCache');
+      const saved = await storage.getItem('historicalPriceCache');
       if (saved) {
-        this.cache = JSON.parse(saved);
+        this.cache = saved;
       }
     } catch (error) {
       console.error('Failed to load historical price cache:', error);
@@ -299,12 +310,12 @@ class HistoricalPricesBatcher {
   }
 
   /**
-   * Save cache to localStorage
+   * Save cache to IndexedDB
    * Automatically cleans up old data if quota exceeded
    */
-  saveCache() {
+  async saveCache() {
     try {
-      localStorage.setItem('historicalPriceCache', JSON.stringify(this.cache));
+      await storage.setItem('historicalPriceCache', this.cache);
     } catch (error) {
       // If quota exceeded, clean up old data and retry
       if (error.name === 'QuotaExceededError') {
@@ -312,27 +323,31 @@ class HistoricalPricesBatcher {
 
         // Import state to get trades for cleanup
         import('../../core/state.js').then(({ state }) => {
-          const removedCount = this.cleanupOldData(state.journal.entries);
+          // Use new 30-day hot window cleanup
+          const today = new Date();
+          const cutoffDate = new Date(today);
+          cutoffDate.setDate(cutoffDate.getDate() - 30);
+          const cutoffDateStr = formatDate(cutoffDate);
+          const removedCount = this.cleanupPricesOlderThan(cutoffDateStr, state.journal.entries);
 
           if (removedCount > 0) {
             console.log(`[HistoricalPrices] Removed ${removedCount} old data points, retrying save...`);
-            try {
-              localStorage.setItem('historicalPriceCache', JSON.stringify(this.cache));
+            storage.setItem('historicalPriceCache', this.cache).then(() => {
               console.log('[HistoricalPrices] Cache saved successfully after cleanup');
-            } catch (retryError) {
+            }).catch(retryError => {
               console.error('[HistoricalPrices] Still cannot save cache after cleanup:', retryError);
               // Last resort: clear entire cache
               console.warn('[HistoricalPrices] Clearing entire historical price cache...');
               this.cache = {};
-              localStorage.removeItem('historicalPriceCache');
-            }
+              storage.removeItem('historicalPriceCache');
+            });
           } else {
             // No old data to remove, cache is just too large
             console.error('[HistoricalPrices] No old data to clean up, cache size is too large');
             // Clear entire cache as last resort
             console.warn('[HistoricalPrices] Clearing entire historical price cache...');
             this.cache = {};
-            localStorage.removeItem('historicalPriceCache');
+            storage.removeItem('historicalPriceCache');
           }
         }).catch(err => {
           console.error('[HistoricalPrices] Error during cleanup:', err);
@@ -371,62 +386,112 @@ class HistoricalPricesBatcher {
     };
   }
 
+
   /**
-   * Clean up irrelevant data - only keep data relevant to actual trades
+   * Clean up prices older than cutoff date (30-day hot window)
+   * Keeps prices for:
+   * 1. All dates within the hot window (last 30 days)
+   * 2. Any ticker with open/trimmed positions (regardless of age)
+   * Deletes everything else to save storage
+   * @param {string} cutoffDate - Date in 'YYYY-MM-DD' format (30 days ago)
    * @param {Array} allTrades - All trades from journal
+   * @returns {number} Number of data points removed
    */
-  cleanupOldData(allTrades = []) {
-    if (allTrades.length === 0) {
-      console.log('[HistoricalPrices] No trades found, skipping cleanup');
-      return 0;
-    }
-
-    // Get all tickers that have been traded
-    const tradedTickers = new Set(allTrades.map(t => t.ticker));
-
-    // Find earliest trade date (need data from then forward)
-    const earliestDate = allTrades.reduce((earliest, trade) => {
-      const tradeDate = trade.timestamp ? new Date(trade.timestamp).toISOString().split('T')[0] : null;
-      if (!tradeDate) return earliest;
-      return !earliest || tradeDate < earliest ? tradeDate : earliest;
-    }, null);
-
-    if (!earliestDate) {
-      console.log('[HistoricalPrices] No valid trade dates, skipping cleanup');
-      return 0;
-    }
+  cleanupPricesOlderThan(cutoffDate, allTrades = []) {
+    // Get tickers with open/trimmed positions - keep ALL their prices
+    const activeTickers = new Set(
+      allTrades
+        .filter(t => t.status === 'open' || t.status === 'trimmed')
+        .map(t => t.ticker)
+    );
 
     let removedCount = 0;
-    const tickersToRemove = [];
 
-    // Remove tickers that were never traded
+    // For each ticker in cache
     for (const ticker in this.cache) {
-      if (!tradedTickers.has(ticker)) {
-        tickersToRemove.push(ticker);
-        removedCount += Object.keys(this.cache[ticker]).length;
-        delete this.cache[ticker];
+      // If ticker has active positions, skip cleanup for this ticker
+      if (activeTickers.has(ticker)) {
         continue;
       }
 
-      // For traded tickers, remove dates before earliest trade
+      // Otherwise, delete prices older than cutoff date
       const dates = Object.keys(this.cache[ticker]);
       for (const date of dates) {
-        if (date < earliestDate) {
+        if (date < cutoffDate) {
           delete this.cache[ticker][date];
           removedCount++;
         }
       }
+
+      // If ticker has no prices left, remove it entirely
+      if (Object.keys(this.cache[ticker]).length === 0) {
+        delete this.cache[ticker];
+      }
     }
 
     if (removedCount > 0) {
-      console.log(`[HistoricalPrices] Cleaned up ${removedCount} irrelevant data points`);
-      if (tickersToRemove.length > 0) {
-        console.log(`[HistoricalPrices] Removed ${tickersToRemove.length} unused tickers:`, tickersToRemove.join(', '));
-      }
+      console.log(`[HistoricalPrices] Hot window cleanup: removed ${removedCount} old price data points`);
+      console.log(`[HistoricalPrices] Kept full price history for ${activeTickers.size} active tickers:`, Array.from(activeTickers).join(', '));
       this.saveCache();
     }
 
     return removedCount;
+  }
+
+  /**
+   * Fetch missing historical prices for a specific trade
+   * Used when editing/adding old trades (outside 30-day hot window)
+   * @param {Object} trade - Trade object with ticker and timestamp
+   * @returns {Promise<boolean>} True if prices fetched successfully
+   */
+  async fetchMissingPricesForTrade(trade) {
+    if (!trade || !trade.ticker) {
+      console.warn('[HistoricalPrices] Cannot fetch prices - invalid trade');
+      return false;
+    }
+
+    // Check if we already have recent data for this ticker
+    if (this.hasRecentData(trade.ticker)) {
+      console.log(`[HistoricalPrices] Using cached data for ${trade.ticker}`);
+      return true;
+    }
+
+    console.log(`[HistoricalPrices] Fetching historical data for ${trade.ticker} (on-demand)...`);
+
+    try {
+      const prices = await this.fetchHistoricalPrices(trade.ticker);
+      return prices !== null;
+    } catch (error) {
+      console.error(`[HistoricalPrices] Failed to fetch prices for ${trade.ticker}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Batch fetch missing prices for multiple trades
+   * Used when editing/adding multiple old trades at once
+   * @param {Array} trades - Array of trade objects
+   * @param {Function} onProgress - Optional progress callback
+   * @returns {Promise<Object>} Map of ticker -> success/failure
+   */
+  async fetchMissingPricesForTrades(trades, onProgress = null) {
+    if (!trades || trades.length === 0) return {};
+
+    // Get unique tickers that need fetching
+    const tickersToFetch = [...new Set(trades.map(t => t.ticker))]
+      .filter(ticker => !this.hasRecentData(ticker));
+
+    if (tickersToFetch.length === 0) {
+      console.log('[HistoricalPrices] All trades already have cached prices');
+      return {};
+    }
+
+    console.log(`[HistoricalPrices] Fetching historical data for ${tickersToFetch.length} tickers (on-demand)...`);
+
+    // Use existing batch fetch logic
+    const results = await this.batchFetchPrices(tickersToFetch, onProgress);
+
+    return results;
   }
 }
 
