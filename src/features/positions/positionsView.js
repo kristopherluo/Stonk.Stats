@@ -531,17 +531,47 @@ class PositionsView {
         const strike = trade.strike || 0;
         const optionSymbol = trade.optionType === 'put' ? 'P' : 'C';
         let formattedExp = '';
+        let daysUntilExpHTML = '';
+
         if (trade.expirationDate) {
           const expDate = new Date(trade.expirationDate + 'T00:00:00');
           formattedExp = expDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+          // Calculate days until expiration
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const daysUntil = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+
+          // Determine urgency styling
+          let urgencyClass = 'option-expiry--safe';
+          let urgencyText = 'safe';
+          if (daysUntil < 0) {
+            urgencyClass = 'option-expiry--expired';
+            urgencyText = 'EXPIRED';
+          } else if (daysUntil === 0) {
+            urgencyClass = 'option-expiry--urgent';
+            urgencyText = 'expires today';
+          } else if (daysUntil === 1) {
+            urgencyClass = 'option-expiry--urgent';
+            urgencyText = 'expires tomorrow';
+          } else if (daysUntil < 7) {
+            urgencyClass = 'option-expiry--urgent';
+            urgencyText = 'urgent';
+          } else if (daysUntil < 14) {
+            urgencyClass = 'option-expiry--warning';
+            urgencyText = 'approaching';
+          }
+
+          daysUntilExpHTML = `<span class="position-card__expiry-badge ${urgencyClass}" title="${urgencyText}">${daysUntil < 0 ? 'EXPIRED' : `${daysUntil}d`}</span>`;
         }
+
         const optionDetails = `${strike}${optionSymbol} ${formattedExp}`;
 
         // For options, shares field contains the actual contract count
         const contracts = shares;
         const originalContracts = trade.originalShares || contracts;
 
-        optionDetailsHTML = `<span class="position-card__option-details">${optionDetails}</span>`;
+        optionDetailsHTML = `<div style="display: flex; align-items: center; gap: var(--space-2);"><span class="position-card__option-details">${optionDetails}</span>${daysUntilExpHTML}</div>`;
         quantityHTML = `<span class="position-card__contracts">${isTrimmed ? `${contracts} of ${originalContracts}` : contracts} contracts</span>`;
       } else {
         // Stock display
