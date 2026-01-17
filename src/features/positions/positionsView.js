@@ -812,7 +812,7 @@ class PositionsView {
     this.stopAutoRefresh();
 
     // Refresh immediately on start (unless skipped for animation purposes)
-    if (!skipImmediate && priceTracker.apiKey) {
+    if (!skipImmediate && (priceTracker.apiKey || priceTracker.optionsApiKey)) {
       this.refreshPrices(true);
     }
 
