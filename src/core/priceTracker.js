@@ -672,8 +672,7 @@ export const priceTracker = {
     const multiplier = 100; // 1 contract = 100 shares
 
     const unrealizedPnL = (currentPrice - trade.entry) * shares * multiplier;
-    const costBasis = trade.entry * shares * multiplier;
-    const unrealizedPercent = costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
+    const unrealizedPercent = trade.entry !== 0 ? ((currentPrice - trade.entry) / trade.entry) * 100 : 0;
 
     return {
       currentPrice,
