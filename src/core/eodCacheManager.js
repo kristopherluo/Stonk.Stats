@@ -30,8 +30,9 @@
 
 import { formatDate, isBusinessDay, getBusinessDaysBetween, parseDate } from '../utils/marketHours.js';
 import { storage } from '../utils/storage.js';
+import { STORAGE_LIMITS, CACHE_KEYS, TIME_CONSTANTS } from '../constants/index.js';
 
-const CACHE_KEY = 'eodCache';
+const CACHE_KEY = CACHE_KEYS.EOD_CACHE;
 const CACHE_VERSION = 1;
 
 class EODCacheManager {
@@ -459,9 +460,9 @@ class EODCacheManager {
    * @param {number} daysToKeep - Number of days to keep (default: 730 = 2 years)
    * @returns {Promise<number>} Number of days deleted
    */
-  async cleanupOldData(daysToKeep = 730) {
+  async cleanupOldData(daysToKeep = STORAGE_LIMITS.EOD_CACHE_RETENTION_DAYS) {
     const today = formatDate(new Date());
-    const cutoffDate = formatDate(new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000));
+    const cutoffDate = formatDate(new Date(Date.now() - daysToKeep * TIME_CONSTANTS.ONE_DAY_MS));
 
     let deletedCount = 0;
 

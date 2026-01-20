@@ -8,6 +8,7 @@ import { formatCurrency, formatDate } from '../core/utils.js';
 import { getTradeRealizedPnL } from '../core/utils/tradeCalculations.js';
 import { state } from '../core/state.js';
 import { priceTracker } from '../core/priceTracker.js';
+import { OPTIONS_CONTRACT_MULTIPLIER } from '../constants/index.js';
 
 /**
  * Render journal table rows for given trades
@@ -54,7 +55,7 @@ export async function renderJournalTableRows(trades, options = {}) {
     if (hasPnL && trade.riskDollars > 0) {
       // For options, riskDollars doesn't include the 100 multiplier
       // so we need to multiply it to get the actual dollar risk
-      const multiplier = trade.assetType === 'options' ? 100 : 1;
+      const multiplier = trade.assetType === 'options' ? OPTIONS_CONTRACT_MULTIPLIER : 1;
       const actualRiskDollars = trade.riskDollars * multiplier;
       rMultiple = pnl / actualRiskDollars;
     }
@@ -63,7 +64,7 @@ export async function renderJournalTableRows(trades, options = {}) {
     let pnlPercent = null;
     if (hasPnL) {
       const totalShares = trade.originalShares || trade.shares;
-      const multiplier = trade.assetType === 'options' ? 100 : 1;
+      const multiplier = trade.assetType === 'options' ? OPTIONS_CONTRACT_MULTIPLIER : 1;
       const positionCost = trade.entry * totalShares * multiplier;
       if (positionCost > 0) {
         pnlPercent = (pnl / positionCost) * 100;

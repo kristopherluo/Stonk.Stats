@@ -9,11 +9,12 @@ import * as marketHours from '../utils/marketHours.js';
 import { storage } from '../utils/storage.js';
 import { compressText, decompressText } from '../utils/compression.js';
 import { validateAndMigrate, addSchemaVersion } from '../utils/migrations.js';
+import { STORAGE_LIMITS, CACHE_KEYS, OPTIONS_CONTRACT_MULTIPLIER, TIME_CONSTANTS } from '../constants/index.js';
 
-const CACHE_KEY = 'riskCalcPriceCache';
-const OPTIONS_CACHE_KEY = 'optionsPriceCache';
-const SUMMARY_CACHE_KEY = 'companySummaryCache';
-const MAX_SUMMARY_CACHE = 30; // Keep only 30 most recent summaries
+const CACHE_KEY = CACHE_KEYS.PRICE_CACHE;
+const OPTIONS_CACHE_KEY = CACHE_KEYS.OPTIONS_PRICE_CACHE;
+const SUMMARY_CACHE_KEY = CACHE_KEYS.SUMMARY_CACHE;
+const MAX_SUMMARY_CACHE = STORAGE_LIMITS.SUMMARY_CACHE_MAX_ITEMS;
 
 export const priceTracker = {
   apiKey: null,
@@ -165,7 +166,7 @@ export const priceTracker = {
       if (data && data.cachedAt) {
         // Cache expires after 30 days
         const age = Date.now() - data.cachedAt;
-        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        const thirtyDays = TIME_CONSTANTS.THIRTY_DAYS_MS;
 
         if (age < thirtyDays) {
           return data;
@@ -262,7 +263,7 @@ export const priceTracker = {
         const cached = this.decompressedSummariesCache.get(upperTicker);
         // Verify it's not expired
         const age = Date.now() - cached.cachedAt;
-        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        const thirtyDays = TIME_CONSTANTS.THIRTY_DAYS_MS;
         if (age < thirtyDays) {
           return cached;
         }
@@ -279,7 +280,7 @@ export const priceTracker = {
 
       // Check if cache is expired (30 days)
       const age = Date.now() - entry.cachedAt;
-      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+      const thirtyDays = TIME_CONSTANTS.THIRTY_DAYS_MS;
       if (age >= thirtyDays) {
         return null;
       }
@@ -730,7 +731,7 @@ export const priceTracker = {
     }
 
     const shares = trade.remainingShares ?? trade.shares;
-    const multiplier = 100; // 1 contract = 100 shares
+    const multiplier = OPTIONS_CONTRACT_MULTIPLIER;
 
     const unrealizedPnL = (currentPrice - trade.entry) * shares * multiplier;
     const unrealizedPercent = trade.entry !== 0 ? ((currentPrice - trade.entry) / trade.entry) * 100 : 0;

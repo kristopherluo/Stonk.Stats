@@ -19,6 +19,7 @@ import { formatDate } from '../utils/marketHours.js';
 import { getCashFlowOnDate, getTransactionDateString, getNetCashFlow, getCashFlowUpToDate } from '../utils/cashFlowUtils.js';
 import { getTradesOpenOnDate, getTradeEntryDateString } from '../utils/tradeUtils.js';
 import { priceTracker } from '../core/priceTracker.js';
+import { OPTIONS_CONTRACT_MULTIPLIER } from '../constants/index.js';
 
 class AccountBalanceCalculator {
   /**
@@ -146,7 +147,7 @@ class AccountBalanceCalculator {
     }
 
     // For options, multiply by 100 (contract multiplier)
-    const multiplier = trade.assetType === 'options' ? 100 : 1;
+    const multiplier = trade.assetType === 'options' ? OPTIONS_CONTRACT_MULTIPLIER : 1;
     const unrealizedPnL = (currentPrice - trade.entry) * shares * multiplier;
     const unrealizedPercent = ((currentPrice - trade.entry) / trade.entry) * 100;
 
