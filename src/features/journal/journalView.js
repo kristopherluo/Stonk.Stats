@@ -14,8 +14,12 @@ import { showToast } from '../../components/ui/ui.js';
 import { DateRangeFilter } from '../../shared/DateRangeFilter.js';
 import { FilterPopup } from '../../shared/FilterPopup.js';
 import { renderJournalTableRows } from '../../shared/journalTableRenderer.js';
+import { VirtualScroll } from '../../components/VirtualScroll.js';
 import { createLogger } from '../../utils/logger.js';
 const logger = createLogger('JournalView');
+
+// Threshold for enabling virtual scrolling (number of trades)
+const VIRTUAL_SCROLL_THRESHOLD = 100;
 
 class JournalView {
   constructor() {
@@ -33,6 +37,8 @@ class JournalView {
     this.expandedRows = new Set();
     this.hasAnimated = false;
     this.isRendering = false; // Guard against overlapping renders
+    this.virtualScroll = null; // Virtual scroll instance for large datasets
+    this.useVirtualScroll = false; // Flag to track if virtual scrolling is active
     // Store flatpickr instances
     this.dateFromPicker = null;
     this.dateToPicker = null;
@@ -759,6 +765,58 @@ class JournalView {
       }
     });
 
+    // Decide whether to use virtual scrolling
+    const shouldUseVirtualScroll = trades.length > VIRTUAL_SCROLL_THRESHOLD;
+
+    if (shouldUseVirtualScroll) {
+      await this.renderTableVirtual(trades, shouldAnimate);
+    } else {
+      await this.renderTableRegular(trades, shouldAnimate);
+    }
+  }
+
+  /**
+   * Render table with virtual scrolling (for large datasets)
+   */
+  async renderTableVirtual(trades, shouldAnimate) {
+    logger.info(`Using virtual scrolling for ${trades.length} trades`);
+
+    // Find the scrollable container (journal table wrapper)
+    const scrollContainer = document.querySelector('.journal-view .journal-table-wrapper');
+    if (!scrollContainer) {
+      logger.error('Scroll container not found, falling back to regular rendering');
+      await this.renderTableRegular(trades, shouldAnimate);
+      return;
+    }
+
+    // Initialize virtual scroll if not already done
+    if (!this.virtualScroll) {
+      this.virtualScroll = new VirtualScroll(scrollContainer, {
+        rowHeight: 60, // Fixed row height in pixels (adjust based on your CSS)
+        buffer: 10, // Render 10 extra rows above/below visible area
+        renderRow: (trade, index) => this.renderSingleRow(trade, index, shouldAnimate)
+      });
+    }
+
+    // Set data and render
+    this.virtualScroll.setData(trades);
+    this.useVirtualScroll = true;
+
+    // Bind actions after initial render
+    setTimeout(() => this.bindRowActions(), 100);
+  }
+
+  /**
+   * Render table normally (for small datasets)
+   */
+  async renderTableRegular(trades, shouldAnimate) {
+    // Clean up virtual scroll if it was previously active
+    if (this.virtualScroll) {
+      this.virtualScroll.destroy();
+      this.virtualScroll = null;
+      this.useVirtualScroll = false;
+    }
+
     // Use shared journal table renderer (single source of truth!)
     const rowsHTML = await renderJournalTableRows(trades, {
       shouldAnimate,
@@ -790,6 +848,49 @@ class JournalView {
     this.elements.tableBody.innerHTML = allHTML;
 
     this.bindRowActions();
+  }
+
+  /**
+   * Render a single row (for virtual scrolling)
+   */
+  renderSingleRow(trade, index, shouldAnimate) {
+    // Generate the row HTML inline (simplified version)
+    // For now, we'll use a simplified renderer
+    // TODO: Refactor renderJournalTableRows to support single-row rendering
+
+    const pnl = getTradeRealizedPnL(trade);
+    const hasPnL = trade.status === 'closed' || trade.status === 'trimmed';
+    const shares = trade.remainingShares ?? trade.shares;
+    const sharesDisplay = trade.originalShares ? `${shares}/${trade.originalShares}` : shares;
+
+    const rowBgClass = trade.status === 'closed' ? (pnl > 0 ? 'journal-row--closed-winner' : 'journal-row--closed-loser') : '';
+    const pnlClass = hasPnL ? (pnl >= 0 ? 'journal-table__pnl--positive' : 'journal-table__pnl--negative') : '';
+
+    const animationDelay = shouldAnimate ? `animation-delay: ${index * 40}ms;` : '';
+
+    return `
+      <tr class="journal-table__row ${shouldAnimate ? 'journal-row--animate' : ''} ${rowBgClass}" data-id="${trade.id}" style="${animationDelay}">
+        <td>${formatDate(trade.timestamp)}</td>
+        <td><strong>${trade.ticker}</strong></td>
+        <td>—</td>
+        <td style="color: var(--primary);">${formatCurrency(trade.entry)}</td>
+        <td>${trade.exitPrice ? formatCurrency(trade.exitPrice) : '—'}</td>
+        <td>${sharesDisplay}</td>
+        <td>—</td>
+        <td class="${pnlClass}">
+          ${hasPnL ? `${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}` : '—'}
+        </td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>
+          <span class="journal-table__status journal-table__status--${trade.status}">
+            ${trade.status.charAt(0).toUpperCase() + trade.status.slice(1)}
+          </span>
+        </td>
+      </tr>
+    `;
   }
 
   renderRowDetails(trade) {

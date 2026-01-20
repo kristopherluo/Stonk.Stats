@@ -1117,3 +1117,48 @@
     background-position: 100% 50%;
   }
 }
+
+/* ========================================
+   Virtual Scrolling Support
+   ======================================== */
+
+/* Ensure table wrapper is scrollable */
+.journal-view .journal-table-wrapper {
+  overflow-y: auto;
+  max-height: calc(100vh - 400px);
+  position: relative;
+}
+
+/* Fixed row height for virtual scrolling */
+.journal-view .journal-table tbody tr {
+  height: 60px;
+  min-height: 60px;
+  max-height: 60px;
+}
+
+/* Ensure cell content doesn't overflow */
+.journal-view .journal-table tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Virtual scroll spacers */
+.virtual-scroll-spacer-top,
+.virtual-scroll-spacer-bottom {
+  pointer-events: none;
+}
+
+.virtual-scroll-spacer-top td,
+.virtual-scroll-spacer-bottom td {
+  padding: 0 !important;
+  border: none !important;
+  height: 0;
+  line-height: 0;
+}
+
+/* Smooth scrolling */
+.journal-view .journal-table-wrapper {
+  scroll-behavior: smooth;
+}
