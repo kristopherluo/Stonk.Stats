@@ -10,28 +10,48 @@ import { equityCurveManager } from '../features/stats/EquityCurveManager.js';
 import eodCacheManager from './eodCacheManager.js';
 import { sharedMetrics } from '../shared/SharedMetrics.js';
 import { storage } from '../utils/storage.js';
+import { createLogger } from '../utils/logger.js';
 
-// These will be set after modules are initialized to avoid circular dependencies
-let settingsModule = null;
-let calculatorModule = null;
-let journalModule = null;
-let clearDataModalModule = null;
-let statsModule = null;
-let equityChartModule = null;
-let positionsViewModule = null;
-let journalViewModule = null;
+const logger = createLogger('DataManager');
+
+// Module registry for dependency injection (avoids circular imports)
+const modules = new Map();
 
 export const dataManager = {
-  // Set module references after initialization
+  /**
+   * Register a module for use by dataManager
+   * Called from main.js after module initialization
+   */
+  registerModule(name, module) {
+    if (!name || !module) {
+      logger.warn(`Attempted to register invalid module: ${name}`);
+      return;
+    }
+    modules.set(name, module);
+    logger.debug(`Registered module: ${name}`);
+  },
+
+  /**
+   * Get a registered module by name
+   * @returns {Object|null} Module instance or null if not found
+   */
+  getModule(name) {
+    return modules.get(name) || null;
+  },
+
+  /**
+   * Legacy method for backward compatibility
+   * @deprecated Use registerModule() instead
+   */
   setModules(settings, calculator, journal, clearDataModal, stats, equityChart, positionsView, journalView) {
-    settingsModule = settings;
-    calculatorModule = calculator;
-    journalModule = journal;
-    clearDataModalModule = clearDataModal;
-    statsModule = stats;
-    equityChartModule = equityChart;
-    positionsViewModule = positionsView;
-    journalViewModule = journalView;
+    this.registerModule('settings', settings);
+    this.registerModule('calculator', calculator);
+    this.registerModule('journal', journal);
+    this.registerModule('clearDataModal', clearDataModal);
+    this.registerModule('stats', stats);
+    this.registerModule('equityChart', equityChart);
+    this.registerModule('positionsView', positionsView);
+    this.registerModule('journalView', journalView);
   },
 
   async exportAllData() {
@@ -119,7 +139,7 @@ export const dataManager = {
           // Import cache data if available (v2+ format)
           // Preserves timestamps so importing doesn't trigger mass API refetches
           if (data.caches) {
-            console.log('[Import] Restoring cache data with timestamps...');
+            logger.debug('[Import] Restoring cache data with timestamps...');
             if (data.caches.riskCalcPriceCache) {
               await storage.setItem('riskCalcPriceCache', data.caches.riskCalcPriceCache);
             }
@@ -140,7 +160,7 @@ export const dataManager = {
             }
           } else {
             // Old format (v1) without cache data - clear caches to force fresh fetch
-            console.log('[Import] Old format detected, clearing caches...');
+            logger.debug('[Import] Old format detected, clearing caches...');
             await storage.removeItem('eodCache');
             await storage.removeItem('riskCalcPriceCache');
           }
@@ -152,7 +172,7 @@ export const dataManager = {
             window.location.reload();
           }, 1500);
         } catch (err) {
-          console.error('Import error:', err);
+          logger.error('Import error:', err);
           showToast('❌ Failed to import data', 'error');
         }
       };
@@ -163,7 +183,8 @@ export const dataManager = {
   },
 
   clearAllData() {
-    if (clearDataModalModule) clearDataModalModule.open();
+    const clearDataModal = this.getModule('clearDataModal');
+    if (clearDataModal) clearDataModal.open();
   },
 
   async confirmClearAllData() {
@@ -250,25 +271,39 @@ export const dataManager = {
     sharedMetrics.recalculateAll();
 
     // Refresh ALL UI components immediately
-    if (settingsModule) {
-      await settingsModule.loadAndApply();
-      settingsModule.updateAccountDisplay(state.account.currentSize);
+    const settings = this.getModule('settings');
+    if (settings) {
+      await settings.loadAndApply();
+      settings.updateAccountDisplay(state.account.currentSize);
     }
-    if (calculatorModule) calculatorModule.calculate();
-    if (journalModule) journalModule.render();
-    if (journalViewModule) journalViewModule.render();
-    if (positionsViewModule) positionsViewModule.render();
-    if (statsModule) await statsModule.refresh();
-    if (equityChartModule) equityChartModule.init();
+
+    const calculator = this.getModule('calculator');
+    if (calculator) calculator.calculate();
+
+    const journal = this.getModule('journal');
+    if (journal) journal.render();
+
+    const journalView = this.getModule('journalView');
+    if (journalView) journalView.render();
+
+    const positionsView = this.getModule('positionsView');
+    if (positionsView) positionsView.render();
+
+    const stats = this.getModule('stats');
+    if (stats) await stats.refresh();
+
+    const equityChart = this.getModule('equityChart');
+    if (equityChart) equityChart.init();
 
     // Emit state change events to update any other listeners
     state.emit('accountSizeChanged', state.account.currentSize);
     state.emit('journalChanged', state.journal.entries);
     state.emit('cashFlowChanged', state.cashFlow);
 
-    if (clearDataModalModule) clearDataModalModule.close();
+    const clearDataModal = this.getModule('clearDataModal');
+    if (clearDataModal) clearDataModal.close();
     showToast('🗑️ All data cleared', 'success');
-    console.log('All data cleared - reset to defaults');
+    logger.debug('All data cleared - reset to defaults');
   },
 
   exportCSV() {

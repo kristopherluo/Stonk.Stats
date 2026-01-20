@@ -3,6 +3,8 @@
  */
 
 import { state } from '../../core/state.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('UI');
 
 // Toast container reference
 let toastContainer = null;
@@ -16,7 +18,7 @@ export function showToast(message, type = 'success') {
   }
 
   if (!toastContainer) {
-    console.warn('Toast container not found');
+    logger.warn('Toast container not found');
     return;
   }
 

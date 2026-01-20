@@ -20,6 +20,7 @@ import { getCashFlowOnDate, getTransactionDateString, getNetCashFlow, getCashFlo
 import { getTradesOpenOnDate, getTradeEntryDateString } from '../utils/tradeUtils.js';
 import { priceTracker } from '../core/priceTracker.js';
 import { OPTIONS_CONTRACT_MULTIPLIER } from '../constants/index.js';
+import { generateOptionKeyFromTrade } from '../utils/optionKeyUtils.js';
 
 class AccountBalanceCalculator {
   /**
@@ -220,7 +221,7 @@ class AccountBalanceCalculator {
 
       if (trade.assetType === 'options') {
         // For options, lookup by unique key: ticker_strike_expiration_type
-        const optionKey = `${trade.ticker}_${trade.strike}_${trade.expirationDate}_${trade.optionType}`;
+        const optionKey = generateOptionKeyFromTrade(trade);
         price = prices[optionKey];
 
         // If no price found, skip (days without logged-in premium storage)

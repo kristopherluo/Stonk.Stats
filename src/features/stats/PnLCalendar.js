@@ -6,6 +6,8 @@
 import { state } from '../../core/state.js';
 import { equityCurveManager } from './EquityCurveManager.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('PnLCalendar');
 import * as marketHours from '../../utils/marketHours.js';
 
 class PnLCalendar {
@@ -34,7 +36,7 @@ class PnLCalendar {
   async init() {
     const container = document.getElementById(this.containerId);
     if (!container) {
-      console.error(`[PnLCalendar] Container with id "${this.containerId}" not found`);
+      logger.error(`Container with id "${this.containerId}" not found`);
       return;
     }
 
@@ -161,7 +163,7 @@ class PnLCalendar {
         });
       }
     } catch (error) {
-      console.error('[PnLCalendar] Error calculating month data:', error);
+      logger.error('[PnLCalendar] Error calculating month data:', error);
     } finally {
       this.isCalculating = false;
     }

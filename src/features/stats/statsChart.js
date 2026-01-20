@@ -4,6 +4,8 @@
 
 import { state } from '../../core/state.js';
 import { stats } from './stats.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('EquityChart');
 
 class EquityChart {
   constructor() {
@@ -51,7 +53,7 @@ class EquityChart {
     this.emptyState = document.getElementById('equityChartEmpty');
 
     if (!this.canvas || !this.container) {
-      console.warn('EquityChart: Required elements not found');
+      logger.warn('EquityChart: Required elements not found');
       return;
     }
 
@@ -70,7 +72,7 @@ class EquityChart {
             stats.renderEquityCurve();
           }
         } catch (error) {
-          console.error('[Chart] Error during resize:', error);
+          logger.error('[Chart] Error during resize:', error);
         }
       }, 100);
     });
@@ -122,7 +124,7 @@ class EquityChart {
 
     const data = this.data;
     if (!data) {
-      console.warn('No data to render');
+      logger.warn('No data to render');
       return;
     }
 

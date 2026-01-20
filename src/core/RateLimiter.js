@@ -8,6 +8,10 @@
  * - Polygon: 5 calls/minute
  */
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('RateLimiter');
+
 /**
  * Token Bucket Rate Limiter
  * Allows bursts but enforces average rate over time
@@ -58,7 +62,7 @@ class TokenBucket {
       this.lastRefill = now;
 
       if (tokensToAdd > 0) {
-        console.log(`[RateLimit ${this.name}] Refilled ${tokensToAdd} tokens (now: ${this.tokens}/${this.capacity})`);
+        logger.debug(`[RateLimit ${this.name}] Refilled ${tokensToAdd} tokens (now: ${this.tokens}/${this.capacity})`);
       }
     }
   }
@@ -73,11 +77,11 @@ class TokenBucket {
 
     if (this.tokens >= count) {
       this.tokens -= count;
-      console.log(`[RateLimit ${this.name}] Consumed ${count} token(s) (remaining: ${this.tokens}/${this.capacity})`);
+      logger.debug(`[RateLimit ${this.name}] Consumed ${count} token(s) (remaining: ${this.tokens}/${this.capacity})`);
       return true;
     }
 
-    console.warn(`[RateLimit ${this.name}] Rate limit: need ${count} tokens, have ${this.tokens}`);
+    logger.warn(`[RateLimit ${this.name}] Rate limit: need ${count} tokens, have ${this.tokens}`);
     return false;
   }
 
@@ -99,7 +103,7 @@ class TokenBucket {
     const intervalsNeeded = Math.ceil(tokensNeeded / this.refillRate);
     const waitTime = intervalsNeeded * this.refillInterval;
 
-    console.log(`[RateLimit ${this.name}] Waiting ${waitTime}ms for ${tokensNeeded} more token(s)...`);
+    logger.debug(`[RateLimit ${this.name}] Waiting ${waitTime}ms for ${tokensNeeded} more token(s)...`);
 
     await new Promise(resolve => setTimeout(resolve, waitTime));
 
@@ -127,7 +131,7 @@ class TokenBucket {
   reset() {
     this.tokens = this.capacity;
     this.lastRefill = Date.now();
-    console.log(`[RateLimit ${this.name}] Reset to full capacity`);
+    logger.debug(`[RateLimit ${this.name}] Reset to full capacity`);
   }
 }
 
@@ -178,7 +182,7 @@ export class RateLimiter {
   tryAcquire(apiName, tokens = 1) {
     const limiter = this.limiters[apiName];
     if (!limiter) {
-      console.warn(`[RateLimit] No limiter configured for ${apiName}`);
+      logger.warn(`[RateLimit] No limiter configured for ${apiName}`);
       return true; // Allow if not configured
     }
 
@@ -194,7 +198,7 @@ export class RateLimiter {
   async acquire(apiName, tokens = 1) {
     const limiter = this.limiters[apiName];
     if (!limiter) {
-      console.warn(`[RateLimit] No limiter configured for ${apiName}`);
+      logger.warn(`[RateLimit] No limiter configured for ${apiName}`);
       return; // Allow if not configured
     }
 
@@ -230,7 +234,7 @@ export class RateLimiter {
    */
   destroy() {
     Object.values(this.limiters).forEach(limiter => limiter.stop());
-    console.log('[RateLimit] All limiters stopped');
+    logger.debug('[RateLimit] All limiters stopped');
   }
 }
 

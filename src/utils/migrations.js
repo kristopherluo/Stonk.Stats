@@ -5,6 +5,10 @@
  * the version and add a migration function to transform old data to new format.
  */
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('Migrations');
+
 // Current schema versions for each cache type
 export const SCHEMA_VERSIONS = {
   historicalPriceCache: 2,  // v1: just prices, v2: added __metadata with fetchedAt
@@ -89,7 +93,7 @@ export function migrateData(cacheType, data, fromVersion) {
 
   // No migration path defined
   if (fromVersion > targetVersion) {
-    console.warn(`[Migrations] Data version ${fromVersion} is newer than current ${targetVersion} for ${cacheType}`);
+    logger.warn(`[Migrations] Data version ${fromVersion} is newer than current ${targetVersion} for ${cacheType}`);
     return data;
   }
 
@@ -103,17 +107,17 @@ export function migrateData(cacheType, data, fromVersion) {
     const migrationFn = migrations[migrationKey];
 
     if (!migrationFn) {
-      console.warn(`[Migrations] No migration found for ${migrationKey}`);
+      logger.warn(`[Migrations] No migration found for ${migrationKey}`);
       // Can't migrate further, return what we have
       return currentData;
     }
 
-    console.log(`[Migrations] Migrating ${cacheType} from v${currentVersion} to v${nextVersion}`);
+    logger.debug(`[Migrations] Migrating ${cacheType} from v${currentVersion} to v${nextVersion}`);
     try {
       currentData = migrationFn(currentData);
       currentVersion = nextVersion;
     } catch (error) {
-      console.error(`[Migrations] Failed to migrate ${cacheType}:`, error);
+      logger.error(`[Migrations] Failed to migrate ${cacheType}:`, error);
       return currentData; // Return partially migrated data
     }
   }
@@ -157,7 +161,7 @@ export function validateAndMigrate(cacheType, data) {
     return data;
   }
 
-  console.log(`[Migrations] ${cacheType} needs migration from v${dataVersion} to v${currentVersion}`);
+  logger.debug(`[Migrations] ${cacheType} needs migration from v${dataVersion} to v${currentVersion}`);
   return migrateData(cacheType, data, dataVersion);
 }
 

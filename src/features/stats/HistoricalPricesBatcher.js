@@ -8,6 +8,9 @@ import { sleep } from '../../core/utils.js';
 import { storage } from '../../utils/storage.js';
 import { state } from '../../core/state.js';
 import { validateAndMigrate, addSchemaVersion } from '../../utils/migrations.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('HistoricalPricesBatcher');
 
 class HistoricalPricesBatcher {
   constructor() {
@@ -62,7 +65,7 @@ class HistoricalPricesBatcher {
    */
   async fetchHistoricalPrices(ticker, outputSize = 90) {
     if (!this.apiKey) {
-      console.warn('No Twelve Data API key set for historical prices');
+      logger.warn('No Twelve Data API key set for historical prices');
       return null;
     }
 
@@ -74,12 +77,12 @@ class HistoricalPricesBatcher {
 
       // Check for API errors
       if (data.status === 'error') {
-        console.error('Twelve Data error:', data.message);
+        logger.error('Twelve Data error:', data.message);
         return null;
       }
 
       if (!data.values || !Array.isArray(data.values)) {
-        console.warn('No time series data for', ticker);
+        logger.warn('No time series data for', ticker);
         return null;
       }
 
@@ -111,7 +114,7 @@ class HistoricalPricesBatcher {
 
       return prices;
     } catch (error) {
-      console.error('Failed to fetch historical prices for', ticker, error);
+      logger.error('Failed to fetch historical prices for', ticker, error);
       return null;
     }
   }
@@ -124,7 +127,7 @@ class HistoricalPricesBatcher {
    */
   async fetchBatchHistoricalPrices(tickers, outputSize = 90) {
     if (!this.apiKey) {
-      console.warn('No Twelve Data API key set for historical prices');
+      logger.warn('No Twelve Data API key set for historical prices');
       return null;
     }
 
@@ -139,7 +142,7 @@ class HistoricalPricesBatcher {
 
       // Check HTTP status
       if (!response.ok) {
-        console.error(`[Prices] HTTP ${response.status} ${response.statusText} - API request failed`);
+        logger.error(`[Prices] HTTP ${response.status} ${response.statusText} - API request failed`);
         return {};
       }
 
@@ -147,7 +150,7 @@ class HistoricalPricesBatcher {
 
       // Check for API-level errors (rate limiting, authentication, etc.)
       if (data.code && data.message) {
-        console.error(`[Prices] Twelve Data API error (${data.code}): ${data.message}`);
+        logger.error(`[Prices] Twelve Data API error (${data.code}): ${data.message}`);
         return {};
       }
 
@@ -157,7 +160,7 @@ class HistoricalPricesBatcher {
       if (tickers.length === 1) {
         // Single ticker response format
         if (data.status === 'error') {
-          console.error(`[Prices] Twelve Data error: ${data.message}`, data.code ? `(${data.code})` : '');
+          logger.error(`[Prices] Twelve Data error: ${data.message}`, data.code ? `(${data.code})` : '');
           return results;
         }
 
@@ -198,17 +201,17 @@ class HistoricalPricesBatcher {
             // Ticker not in response - determine why
             const allKeys = Object.keys(data);
             if (allKeys.length === 0) {
-              console.error(`[Prices] ${ticker}: API returned empty response (possible rate limit or API issue)`);
+              logger.error(`[Prices] ${ticker}: API returned empty response (possible rate limit or API issue)`);
             } else if (data.status === 'error') {
-              console.error(`[Prices] ${ticker}: ${data.message}${data.code ? ` (${data.code})` : ''}`);
+              logger.error(`[Prices] ${ticker}: ${data.message}${data.code ? ` (${data.code})` : ''}`);
             } else {
-              console.error(`[Prices] ${ticker}: Not returned by API (invalid symbol, unsupported exchange, or not included in your API plan)`);
+              logger.error(`[Prices] ${ticker}: Not returned by API (invalid symbol, unsupported exchange, or not included in your API plan)`);
             }
             continue;
           }
 
           if (tickerData.status === 'error') {
-            console.error(`[Prices] ${ticker}: ${tickerData.message}${tickerData.code ? ` (${tickerData.code})` : ''}`);
+            logger.error(`[Prices] ${ticker}: ${tickerData.message}${tickerData.code ? ` (${tickerData.code})` : ''}`);
             continue;
           }
 
@@ -246,7 +249,7 @@ class HistoricalPricesBatcher {
       this.saveCache();
       return results;
     } catch (error) {
-      console.error('Failed to fetch batch historical prices:', error);
+      logger.error('Failed to fetch batch historical prices:', error);
       return {};
     }
   }
@@ -433,7 +436,7 @@ class HistoricalPricesBatcher {
         }
       }
     } catch (error) {
-      console.error('Failed to load historical price cache:', error);
+      logger.error('Failed to load historical price cache:', error);
       this.cache = {};
       this.metadata = {};
     }
@@ -448,7 +451,7 @@ class HistoricalPricesBatcher {
     try {
       const approachingQuota = await storage.isApproachingQuota();
       if (approachingQuota) {
-        console.warn('[HistoricalPrices] Storage at 80% capacity, running proactive cleanup...');
+        logger.warn('[HistoricalPrices] Storage at 80% capacity, running proactive cleanup...');
 
         const { state } = await import('../../core/state.js');
         const today = new Date();
@@ -458,11 +461,11 @@ class HistoricalPricesBatcher {
         const removedCount = this.cleanupPricesOlderThan(cutoffDateStr, state.journal.entries);
 
         if (removedCount > 0) {
-          console.log(`[HistoricalPrices] Proactive cleanup: removed ${removedCount} old data points`);
+          logger.debug(`[HistoricalPrices] Proactive cleanup: removed ${removedCount} old data points`);
         }
       }
     } catch (quotaCheckError) {
-      console.warn('[HistoricalPrices] Could not check quota, proceeding with save:', quotaCheckError);
+      logger.warn('[HistoricalPrices] Could not check quota, proceeding with save:', quotaCheckError);
     }
 
     // Attempt to save
@@ -476,7 +479,7 @@ class HistoricalPricesBatcher {
     } catch (error) {
       // Reactive cleanup: If quota exceeded despite proactive check, clean up and retry
       if (error.name === 'QuotaExceededError') {
-        console.warn('[HistoricalPrices] Storage quota exceeded, emergency cleanup...');
+        logger.warn('[HistoricalPrices] Storage quota exceeded, emergency cleanup...');
 
         // Import state to get trades for cleanup
         import('../../core/state.js').then(({ state }) => {
@@ -488,35 +491,35 @@ class HistoricalPricesBatcher {
           const removedCount = this.cleanupPricesOlderThan(cutoffDateStr, state.journal.entries);
 
           if (removedCount > 0) {
-            console.log(`[HistoricalPrices] Emergency: removed ${removedCount} old data points, retrying save...`);
+            logger.debug(`[HistoricalPrices] Emergency: removed ${removedCount} old data points, retrying save...`);
             const dataToSave = addSchemaVersion('historicalPriceCache', {
               ...this.cache,
               __metadata: this.metadata
             });
             storage.setItem('historicalPriceCache', dataToSave).then(() => {
-              console.log('[HistoricalPrices] Cache saved successfully after emergency cleanup');
+              logger.debug('[HistoricalPrices] Cache saved successfully after emergency cleanup');
             }).catch(retryError => {
-              console.error('[HistoricalPrices] Still cannot save cache after cleanup:', retryError);
+              logger.error('[HistoricalPrices] Still cannot save cache after cleanup:', retryError);
               // Last resort: clear entire cache
-              console.warn('[HistoricalPrices] Clearing entire historical price cache...');
+              logger.warn('[HistoricalPrices] Clearing entire historical price cache...');
               this.cache = {};
               this.metadata = {};
               storage.removeItem('historicalPriceCache');
             });
           } else {
             // No old data to remove, cache is just too large
-            console.error('[HistoricalPrices] No old data to clean up, cache size is too large');
+            logger.error('[HistoricalPrices] No old data to clean up, cache size is too large');
             // Clear entire cache as last resort
-            console.warn('[HistoricalPrices] Clearing entire historical price cache...');
+            logger.warn('[HistoricalPrices] Clearing entire historical price cache...');
             this.cache = {};
             this.metadata = {};
             storage.removeItem('historicalPriceCache');
           }
         }).catch(err => {
-          console.error('[HistoricalPrices] Error during emergency cleanup:', err);
+          logger.error('[HistoricalPrices] Error during emergency cleanup:', err);
         });
       } else {
-        console.error('Failed to save historical price cache:', error);
+        logger.error('Failed to save historical price cache:', error);
       }
     }
   }
@@ -595,8 +598,8 @@ class HistoricalPricesBatcher {
     }
 
     if (removedCount > 0) {
-      console.log(`[HistoricalPrices] Hot window cleanup: removed ${removedCount} old price data points`);
-      console.log(`[HistoricalPrices] Kept full price history for ${activeTickers.size} active tickers:`, Array.from(activeTickers).join(', '));
+      logger.debug(`[HistoricalPrices] Hot window cleanup: removed ${removedCount} old price data points`);
+      logger.debug(`[HistoricalPrices] Kept full price history for ${activeTickers.size} active tickers:`, Array.from(activeTickers).join(', '));
       this.saveCache();
     }
 
@@ -611,23 +614,23 @@ class HistoricalPricesBatcher {
    */
   async fetchMissingPricesForTrade(trade) {
     if (!trade || !trade.ticker) {
-      console.warn('[HistoricalPrices] Cannot fetch prices - invalid trade');
+      logger.warn('[HistoricalPrices] Cannot fetch prices - invalid trade');
       return false;
     }
 
     // Check if we already have recent data for this ticker
     if (this.hasRecentData(trade.ticker)) {
-      console.log(`[HistoricalPrices] Using cached data for ${trade.ticker}`);
+      logger.debug(`[HistoricalPrices] Using cached data for ${trade.ticker}`);
       return true;
     }
 
-    console.log(`[HistoricalPrices] Fetching historical data for ${trade.ticker} (on-demand)...`);
+    logger.debug(`[HistoricalPrices] Fetching historical data for ${trade.ticker} (on-demand)...`);
 
     try {
       const prices = await this.fetchHistoricalPrices(trade.ticker);
       return prices !== null;
     } catch (error) {
-      console.error(`[HistoricalPrices] Failed to fetch prices for ${trade.ticker}:`, error);
+      logger.error(`[HistoricalPrices] Failed to fetch prices for ${trade.ticker}:`, error);
       return false;
     }
   }
@@ -647,11 +650,11 @@ class HistoricalPricesBatcher {
       .filter(ticker => !this.hasRecentData(ticker));
 
     if (tickersToFetch.length === 0) {
-      console.log('[HistoricalPrices] All trades already have cached prices');
+      logger.debug('[HistoricalPrices] All trades already have cached prices');
       return {};
     }
 
-    console.log(`[HistoricalPrices] Fetching historical data for ${tickersToFetch.length} tickers (on-demand)...`);
+    logger.debug(`[HistoricalPrices] Fetching historical data for ${tickersToFetch.length} tickers (on-demand)...`);
 
     // Use existing batch fetch logic
     const results = await this.batchFetchPrices(tickersToFetch, onProgress);

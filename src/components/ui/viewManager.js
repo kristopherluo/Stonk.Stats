@@ -3,6 +3,8 @@
  */
 
 import { state } from '../../core/state.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('ViewManager');
 
 class ViewManager {
   constructor() {
@@ -30,7 +32,7 @@ class ViewManager {
     this.mobileNavBackdrop = document.getElementById('mobileNavBackdrop');
 
     if (!this.views.positions) {
-      console.warn('ViewManager: Positions element not found');
+      logger.warn('Positions element not found');
       return;
     }
 

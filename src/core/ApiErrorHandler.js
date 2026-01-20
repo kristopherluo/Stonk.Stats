@@ -8,6 +8,10 @@
  * - Retry logic with configurable attempts
  */
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ApiErrorHandler');
+
 /**
  * Circuit Breaker States
  * - CLOSED: Normal operation, requests go through
@@ -50,7 +54,7 @@ class CircuitBreaker {
     if (this.state === CircuitState.OPEN) {
       // Check if timeout has passed
       if (Date.now() >= this.nextAttemptTime) {
-        console.log(`[Circuit ${this.name}] Timeout passed, transitioning to HALF_OPEN`);
+        logger.debug(`[Circuit ${this.name}] Timeout passed, transitioning to HALF_OPEN`);
         this.state = CircuitState.HALF_OPEN;
         return true;
       }
@@ -74,7 +78,7 @@ class CircuitBreaker {
     if (this.state === CircuitState.HALF_OPEN) {
       this.successCount++;
       if (this.successCount >= this.successThreshold) {
-        console.log(`[Circuit ${this.name}] ${this.successThreshold} successes, closing circuit`);
+        logger.debug(`[Circuit ${this.name}] ${this.successThreshold} successes, closing circuit`);
         this.state = CircuitState.CLOSED;
         this.successCount = 0;
       }
@@ -89,13 +93,13 @@ class CircuitBreaker {
     this.lastFailureTime = Date.now();
 
     if (this.state === CircuitState.HALF_OPEN) {
-      console.log(`[Circuit ${this.name}] Failed in HALF_OPEN, opening circuit`);
+      logger.debug(`[Circuit ${this.name}] Failed in HALF_OPEN, opening circuit`);
       this.openCircuit();
       return;
     }
 
     if (this.failureCount >= this.failureThreshold) {
-      console.log(`[Circuit ${this.name}] ${this.failureCount} failures, opening circuit`);
+      logger.debug(`[Circuit ${this.name}] ${this.failureCount} failures, opening circuit`);
       this.openCircuit();
     }
   }
@@ -107,7 +111,7 @@ class CircuitBreaker {
     this.state = CircuitState.OPEN;
     this.nextAttemptTime = Date.now() + this.timeout;
     this.successCount = 0;
-    console.warn(`[Circuit ${this.name}] Circuit OPEN until ${new Date(this.nextAttemptTime).toLocaleTimeString()}`);
+    logger.warn(`[Circuit ${this.name}] Circuit OPEN until ${new Date(this.nextAttemptTime).toLocaleTimeString()}`);
   }
 
   /**
@@ -225,7 +229,7 @@ export class ApiErrorHandler {
 
         // Check if should retry
         if (!retryable || !backoff.shouldRetry(attempt + 1)) {
-          console.error(`[${apiName}] Failed after ${attempt + 1} attempts:`, {
+          logger.error(`[${apiName}] Failed after ${attempt + 1} attempts:`, {
             error: error.message,
             context
           });
@@ -238,7 +242,7 @@ export class ApiErrorHandler {
           throw this.normalizeError(apiName, error, context);
         }
 
-        console.warn(`[${apiName}] Attempt ${attempt + 1} failed, retrying in ${delay}ms...`, {
+        logger.warn(`[${apiName}] Attempt ${attempt + 1} failed, retrying in ${delay}ms...`, {
           error: error.message,
           context
         });
@@ -305,7 +309,7 @@ export class ApiErrorHandler {
       circuit.state = CircuitState.CLOSED;
       circuit.failureCount = 0;
       circuit.successCount = 0;
-      console.log(`[Circuit ${apiName}] Manually reset to CLOSED`);
+      logger.debug(`[Circuit ${apiName}] Manually reset to CLOSED`);
     }
   }
 

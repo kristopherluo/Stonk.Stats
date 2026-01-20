@@ -2,6 +2,10 @@
  * Utility Functions - Formatting and parsing helpers
  */
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Utils');
+
 // Currency formatting
 export function formatCurrency(value) {
   return new Intl.NumberFormat('en-US', {
@@ -120,7 +124,7 @@ export function createTimestampFromDateInput(dateInputValue) {
 export function initFlatpickr(dateInput, options = {}) {
   if (!dateInput) return null;
   if (!window.flatpickr) {
-    console.error('Flatpickr library not loaded');
+    logger.error('Flatpickr library not loaded');
     return null;
   }
 

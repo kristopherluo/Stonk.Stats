@@ -7,6 +7,10 @@ import { calculateRealizedPnL, getTradeRealizedPnL } from './utils/tradeCalculat
 import { compressTradeNotes, decompressTradeNotes } from '../utils/compression.js';
 import { storage } from '../utils/storage.js';
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('State');
+
 class AppState {
   constructor() {
     this.state = {
@@ -347,7 +351,7 @@ class AppState {
     try {
       await storage.setItem('riskCalcSettings', this.state.settings);
     } catch (e) {
-      console.error('Failed to save settings:', e);
+      logger.error('Failed to save settings:', e);
     }
   }
 
@@ -381,7 +385,7 @@ class AppState {
         this.state.account.maxPositionPercent = this.state.settings.defaultMaxPositionPercent;
       }
     } catch (e) {
-      console.error('Failed to load settings:', e);
+      logger.error('Failed to load settings:', e);
     }
   }
 
@@ -397,7 +401,7 @@ class AppState {
       const compressedEntries = this.state.journal.entries.map(trade => compressTradeNotes(trade));
       await storage.setItem('riskCalcJournal', compressedEntries);
     } catch (e) {
-      console.error('Failed to save journal:', e);
+      logger.error('Failed to save journal:', e);
     }
   }
 
@@ -412,7 +416,7 @@ class AppState {
         // realizedPnL and currentSize are now computed properties - no manual calculation needed
       }
     } catch (e) {
-      console.error('Failed to load journal:', e);
+      logger.error('Failed to load journal:', e);
     }
   }
 
@@ -435,7 +439,7 @@ class AppState {
     });
 
     if (migrated > 0) {
-      console.log(`[State] Migrated ${migrated} trades to include options fields`);
+      logger.debug(`[State] Migrated ${migrated} trades to include options fields`);
       this.saveJournal(); // Save migrated data
     }
   }
@@ -450,7 +454,7 @@ class AppState {
     try {
       await storage.setItem('riskCalcCashFlow', this.state.cashFlow);
     } catch (e) {
-      console.error('Failed to save cash flow:', e);
+      logger.error('Failed to save cash flow:', e);
     }
   }
 
@@ -466,7 +470,7 @@ class AppState {
         // currentSize is now a computed property - no manual adjustment needed
       }
     } catch (e) {
-      console.error('Failed to load cash flow:', e);
+      logger.error('Failed to load cash flow:', e);
     }
   }
 
@@ -494,7 +498,7 @@ class AppState {
     try {
       await storage.setItem('riskCalcJournalMeta', this.state.journalMeta);
     } catch (e) {
-      console.error('Failed to save journal meta:', e);
+      logger.error('Failed to save journal meta:', e);
     }
   }
 
@@ -512,7 +516,7 @@ class AppState {
         };
       }
     } catch (e) {
-      console.error('Failed to load journal meta:', e);
+      logger.error('Failed to load journal meta:', e);
     }
   }
 
@@ -559,7 +563,7 @@ class AppState {
 
       return size;
     } catch (error) {
-      console.error('Error calculating currentSize:', error);
+      logger.error('Error calculating currentSize:', error);
       // Fallback: return starting balance + realized P&L (no cash flow)
       return this.state.settings.startingAccountSize + this.realizedPnL;
     }

@@ -15,6 +15,8 @@ import { storage } from '../../utils/storage.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
 import { formatDate } from '../../utils/marketHours.js';
 import { StatsCalculator } from '../stats/StatsCalculator.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('Settings');
 
 class Settings {
   constructor() {
@@ -118,7 +120,7 @@ class Settings {
       this.withdrawDatePicker = null;
     }
 
-    console.log('[Settings] Destroyed and cleaned up event listeners');
+    logger.debug('[Settings] Destroyed and cleaned up event listeners');
   }
 
   cacheElements() {

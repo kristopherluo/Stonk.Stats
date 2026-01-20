@@ -21,6 +21,10 @@ import { getTradeEntryDateString } from '../../utils/tradeUtils.js';
 import { viewManager } from '../../components/ui/viewManager.js';
 import { journalView } from '../journal/journalView.js';
 import { renderJournalTableRows } from '../../shared/journalTableRenderer.js';
+import { convertHyphenKeyToUnderscoreKey, generateOptionKeyFromTrade } from '../../utils/optionKeyUtils.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('Stats');
 
 // Timing constants
 const AUTO_REFRESH_INTERVAL_MS = 60000; // 60 seconds
@@ -110,7 +114,7 @@ class Stats {
           this.refresh();
         }
       } catch (error) {
-        console.error('Error in journalEntryAdded handler:', error);
+        logger.error('Error in journalEntryAdded handler:', error);
       }
     });
     state.on('journalEntryUpdated', (entry) => {
@@ -122,7 +126,7 @@ class Stats {
           this.refresh();
         }
       } catch (error) {
-        console.error('Error in journalEntryUpdated handler:', error);
+        logger.error('Error in journalEntryUpdated handler:', error);
       }
     });
     state.on('journalEntryDeleted', (entry) => {
@@ -134,7 +138,7 @@ class Stats {
           this.refresh();
         }
       } catch (error) {
-        console.error('Error in journalEntryDeleted handler:', error);
+        logger.error('Error in journalEntryDeleted handler:', error);
       }
     });
     state.on('accountSizeChanged', () => {
@@ -162,7 +166,7 @@ class Stats {
           this.refresh();
         }
       } catch (error) {
-        console.error('Error in cashFlowChanged handler:', error);
+        logger.error('Error in cashFlowChanged handler:', error);
         // Fallback to full invalidation
         eodCacheManager.clearAllData();
         if (state.ui.currentView === 'stats') {
@@ -385,11 +389,11 @@ class Stats {
       // FIX: Auto-fetch prices if cache is empty (prevents silent $0 unrealized P&L)
       const activeTrades = state.journal.entries.filter(t => t.status === 'open' || t.status === 'trimmed');
       if (activeTrades.length > 0 && priceTracker.cache.size === 0) {
-        console.log('[Stats] Price cache empty, fetching current prices...');
+        logger.debug('[Stats] Price cache empty, fetching current prices...');
         try {
           await priceTracker.fetchActivePrices();
         } catch (error) {
-          console.error('[Stats] Failed to fetch prices:', error);
+          logger.error('[Stats] Failed to fetch prices:', error);
           // Continue anyway - will show without unrealized P&L
         }
       }
@@ -403,7 +407,7 @@ class Stats {
         this.calendar.refresh();
       }
     } catch (error) {
-      console.error('Error refreshing stats:', error);
+      logger.error('Error refreshing stats:', error);
       showToast('Error calculating stats', 'error');
     } finally {
       this.showLoadingState(false);
@@ -597,7 +601,7 @@ class Stats {
 
   async renderEquityCurve() {
     if (!this.chart) {
-      console.warn('Chart not initialized');
+      logger.warn('Chart not initialized');
       return;
     }
 
@@ -647,8 +651,8 @@ class Stats {
         this.elements.chartValue.textContent = `$${this.formatNumber(lastPoint.balance)}`;
       }
     } catch (error) {
-      console.error('Error rendering equity curve:', error);
-      console.error('Error stack:', error.stack);
+      logger.error('Error rendering equity curve:', error);
+      logger.error('Error stack:', error.stack);
       showToast(`Error loading equity curve: ${error.message}`, 'error');
     } finally {
       // Hide loading
@@ -791,7 +795,7 @@ class Stats {
    */
   startAutoRefresh() {
     if (!priceTracker.apiKey) {
-      console.log('[Stats] No Finnhub API key, skipping auto-refresh');
+      logger.debug('[Stats] No Finnhub API key, skipping auto-refresh');
       return;
     }
 
@@ -806,7 +810,7 @@ class Stats {
       this.refreshPrices(true);
     }, AUTO_REFRESH_INTERVAL_MS);
 
-    console.log('[Stats] Started auto-refresh (60s interval)');
+    logger.debug('[Stats] Started auto-refresh (60s interval)');
   }
 
   /**
@@ -817,7 +821,7 @@ class Stats {
     if (this.autoRefreshInterval) {
       clearInterval(this.autoRefreshInterval);
       this.autoRefreshInterval = null;
-      console.log('[Stats] Stopped auto-refresh');
+      logger.debug('[Stats] Stopped auto-refresh');
     }
   }
 
@@ -834,7 +838,7 @@ class Stats {
       );
 
       if (activeTrades.length === 0) {
-        console.log('[Stats] No active trades to refresh prices for');
+        logger.debug('[Stats] No active trades to refresh prices for');
         return;
       }
 
@@ -857,7 +861,7 @@ class Stats {
         showToast('Prices updated', 'success');
       }
     } catch (error) {
-      console.error('[Stats] Error refreshing prices:', error);
+      logger.error('[Stats] Error refreshing prices:', error);
       if (!silent) {
         showToast('Error refreshing prices', 'error');
       }
@@ -883,13 +887,13 @@ class Stats {
       const isActualTradingDay = tradingDay === currentWeekday;
 
       if (isAfterClose && !eodCacheManager.hasEODData(tradingDay) && isActualTradingDay) {
-        console.log(`[Stats] Market closed, saving EOD snapshot for ${tradingDay}`);
+        logger.debug(`[Stats] Market closed, saving EOD snapshot for ${tradingDay}`);
         await this.saveEODSnapshot(tradingDay);
       } else if (isAfterClose && !isActualTradingDay) {
-        console.log(`[Stats] Not saving EOD for ${tradingDay} because current day is ${currentWeekday} (holiday/weekend)`);
+        logger.debug(`[Stats] Not saving EOD for ${tradingDay} because current day is ${currentWeekday} (holiday/weekend)`);
       }
     } catch (error) {
-      console.error('[Stats] Error checking/saving EOD:', error);
+      logger.error('[Stats] Error checking/saving EOD:', error);
     }
   }
 
@@ -918,13 +922,11 @@ class Stats {
       }
 
       // Get options prices from optionsCache (Map with hyphen keys)
+      // Convert to standard underscore format using utility
       const optionsCache = priceTracker.optionsCache || new Map();
       for (const [hyphenKey, data] of optionsCache.entries()) {
         if (data && data.price) {
-          // Convert from hyphen format (ticker-expiration-type-strike)
-          // to underscore format (ticker_strike_expiration_type)
-          const [ticker, expirationDate, optionType, strike] = hyphenKey.split('-');
-          const underscoreKey = `${ticker}_${strike}_${expirationDate}_${optionType}`;
+          const underscoreKey = convertHyphenKeyToUnderscoreKey(hyphenKey);
           prices[underscoreKey] = { price: data.price, timestamp: data.timestamp };
         }
       }
@@ -997,15 +999,15 @@ class Stats {
       });
 
       if (isIncomplete) {
-        console.warn(`[Stats] Saved incomplete EOD snapshot for ${dateStr}. Missing tickers:`, incompleteTickers);
+        logger.warn(`[Stats] Saved incomplete EOD snapshot for ${dateStr}. Missing tickers:`, incompleteTickers);
       } else {
-        console.log(`[Stats] Saved complete EOD snapshot for ${dateStr}:`, {
+        logger.debug(`[Stats] Saved complete EOD snapshot for ${dateStr}:`, {
           balance: balanceData.balance,
           positions: positionsOwned.length
         });
       }
     } catch (error) {
-      console.error(`[Stats] Failed to save EOD snapshot for ${dateStr}:`, error);
+      logger.error(`[Stats] Failed to save EOD snapshot for ${dateStr}:`, error);
 
       // Mark day as incomplete with error
       eodCacheManager.saveEODSnapshot(dateStr, {

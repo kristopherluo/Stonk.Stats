@@ -3,6 +3,10 @@
  * Provides async storage with automatic migration from localStorage
  */
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('Storage');
+
 // Check if localforage is available (loaded via script tag)
 if (typeof localforage === 'undefined') {
   throw new Error('localforage library not loaded. Make sure the script tag is included in index.html');
@@ -93,7 +97,7 @@ class StorageAdapter {
 
               await localforage.setItem(key, valueToStore);
             } catch (e) {
-              console.error(`[Storage] Failed to migrate ${key}:`, e);
+              logger.error(`[Storage] Failed to migrate ${key}:`, e);
             }
           }
         }
@@ -101,7 +105,7 @@ class StorageAdapter {
 
       this.migrated = true;
     } catch (error) {
-      console.error('[Storage] Migration error:', error);
+      logger.error('[Storage] Migration error:', error);
       this.migrated = true; // Don't block app if migration fails
     }
   }
@@ -118,7 +122,7 @@ class StorageAdapter {
       const value = await localforage.getItem(key);
       return value;
     } catch (error) {
-      console.error(`[Storage] Error getting ${key}:`, error);
+      logger.error(`[Storage] Error getting ${key}:`, error);
       return null;
     }
   }
@@ -135,7 +139,7 @@ class StorageAdapter {
     try {
       await localforage.setItem(key, value);
     } catch (error) {
-      console.error(`[Storage] Error setting ${key}:`, error);
+      logger.error(`[Storage] Error setting ${key}:`, error);
       throw error; // Re-throw to let caller handle quota errors
     }
   }
@@ -151,7 +155,7 @@ class StorageAdapter {
     try {
       await localforage.removeItem(key);
     } catch (error) {
-      console.error(`[Storage] Error removing ${key}:`, error);
+      logger.error(`[Storage] Error removing ${key}:`, error);
     }
   }
 
@@ -163,7 +167,7 @@ class StorageAdapter {
     try {
       await localforage.clear();
     } catch (error) {
-      console.error('[Storage] Error clearing storage:', error);
+      logger.error('[Storage] Error clearing storage:', error);
     }
   }
 
@@ -175,7 +179,7 @@ class StorageAdapter {
     try {
       return await localforage.keys();
     } catch (error) {
-      console.error('[Storage] Error getting keys:', error);
+      logger.error('[Storage] Error getting keys:', error);
       return [];
     }
   }
@@ -203,7 +207,7 @@ class StorageAdapter {
         keys: keys.length
       };
     } catch (error) {
-      console.error('[Storage] Error calculating usage:', error);
+      logger.error('[Storage] Error calculating usage:', error);
       return { totalSize: 0, breakdown: {}, keys: 0 };
     }
   }
@@ -215,7 +219,7 @@ class StorageAdapter {
   async getQuotaEstimate() {
     try {
       if (!navigator.storage || !navigator.storage.estimate) {
-        console.warn('[Storage] StorageManager API not available');
+        logger.warn('[Storage] StorageManager API not available');
         return { usage: 0, quota: 0, percentage: 0, available: false };
       }
 
@@ -231,7 +235,7 @@ class StorageAdapter {
         available: true
       };
     } catch (error) {
-      console.error('[Storage] Error getting quota estimate:', error);
+      logger.error('[Storage] Error getting quota estimate:', error);
       return { usage: 0, quota: 0, percentage: 0, available: false };
     }
   }

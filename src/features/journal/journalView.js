@@ -14,6 +14,8 @@ import { showToast } from '../../components/ui/ui.js';
 import { DateRangeFilter } from '../../shared/DateRangeFilter.js';
 import { FilterPopup } from '../../shared/FilterPopup.js';
 import { renderJournalTableRows } from '../../shared/journalTableRenderer.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('JournalView');
 
 class JournalView {
   constructor() {
@@ -1163,7 +1165,7 @@ class JournalView {
       const cache = localStorage.getItem('chartDataCache');
       return cache ? JSON.parse(cache) : {};
     } catch (e) {
-      console.error('Error reading chart cache:', e);
+      logger.error('Error reading chart cache:', e);
       return {};
     }
   }
@@ -1179,7 +1181,7 @@ class JournalView {
       };
       localStorage.setItem('chartDataCache', JSON.stringify(cache));
     } catch (e) {
-      console.error('Error saving chart cache:', e);
+      logger.error('Error saving chart cache:', e);
     }
   }
 
@@ -1436,7 +1438,7 @@ class JournalView {
       // Store chart instance to clean up later
       chartContainer._chartInstance = { chart, resizeObserver };
     } catch (error) {
-      console.error('Failed to load chart:', error);
+      logger.error('Failed to load chart:', error);
       chartContainer.innerHTML = `
         <div class="journal-row-details__chart-error">
           <span>⚠️ ${error.message || 'Failed to load chart'}</span>
@@ -1543,7 +1545,7 @@ class JournalView {
     } catch (error) {
       // Only log if it's not a "no data available" error (which is expected for many tickers)
       if (!error.message.includes('No company overview data available')) {
-        console.error('Error fetching company summary:', error);
+        logger.error('Error fetching company summary:', error);
       }
       // Show company info we have from cache instead of hiding on error
       const cachedCompany = this.getCompanyData(trade.ticker);

@@ -10,7 +10,9 @@ import { storage } from '../utils/storage.js';
 import { compressText, decompressText } from '../utils/compression.js';
 import { validateAndMigrate, addSchemaVersion } from '../utils/migrations.js';
 import { STORAGE_LIMITS, CACHE_KEYS, OPTIONS_CONTRACT_MULTIPLIER, TIME_CONSTANTS } from '../constants/index.js';
+import { createLogger } from '../utils/logger.js';
 
+const logger = createLogger('PriceTracker');
 const CACHE_KEY = CACHE_KEYS.PRICE_CACHE;
 const OPTIONS_CACHE_KEY = CACHE_KEYS.OPTIONS_PRICE_CACHE;
 const SUMMARY_CACHE_KEY = CACHE_KEYS.SUMMARY_CACHE;
@@ -63,11 +65,11 @@ export const priceTracker = {
         const currentTradingDay = marketHours.getTradingDay();
         if (tradingDay && tradingDay === currentTradingDay) {
           this.optionsCache = new Map(Object.entries(prices));
-          console.log(`[PriceTracker] Loaded ${this.optionsCache.size} options prices from cache`);
+          logger.debug(`[PriceTracker] Loaded ${this.optionsCache.size} options prices from cache`);
         }
       }
     } catch (e) {
-      console.error('Failed to load price cache:', e);
+      logger.error('Failed to load price cache:', e);
     }
   },
 
@@ -82,7 +84,7 @@ export const priceTracker = {
       });
       await storage.setItem(CACHE_KEY, dataToSave);
     } catch (e) {
-      console.error('Failed to save price cache:', e);
+      logger.error('Failed to save price cache:', e);
     }
   },
 
@@ -96,9 +98,9 @@ export const priceTracker = {
         tradingDay: marketHours.getTradingDay(now) // Store trading day for proper expiry
       });
       await storage.setItem(OPTIONS_CACHE_KEY, dataToSave);
-      console.log(`[PriceTracker] Saved ${this.optionsCache.size} options prices to cache`);
+      logger.debug(`[PriceTracker] Saved ${this.optionsCache.size} options prices to cache`);
     } catch (e) {
-      console.error('Failed to save options price cache:', e);
+      logger.error('Failed to save options price cache:', e);
     }
   },
 
@@ -136,7 +138,7 @@ export const priceTracker = {
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error(`Failed to fetch price for ${ticker}:`, error);
+      logger.error(`Failed to fetch price for ${ticker}:`, error);
       throw error;
     }
   },
@@ -175,7 +177,7 @@ export const priceTracker = {
 
       return null;
     } catch (e) {
-      console.error('Error reading company data cache:', e);
+      logger.error('Error reading company data cache:', e);
       return null;
     }
   },
@@ -193,7 +195,7 @@ export const priceTracker = {
 
       await storage.setItem('companyDataCache', parsed);
     } catch (e) {
-      console.error('Error saving company data cache:', e);
+      logger.error('Error saving company data cache:', e);
     }
   },
 
@@ -244,7 +246,7 @@ export const priceTracker = {
 
       return profile;
     } catch (error) {
-      console.error(`[Company Profile] ❌ Failed to fetch profile for ${ticker}:`, error);
+      logger.error(`[Company Profile] ❌ Failed to fetch profile for ${ticker}:`, error);
       return null;
     }
   },
@@ -296,7 +298,7 @@ export const priceTracker = {
 
       return decompressed;
     } catch (e) {
-      console.error('[Summary Cache] Error reading cache:', e);
+      logger.error('[Summary Cache] Error reading cache:', e);
       return null;
     }
   },
@@ -334,7 +336,7 @@ export const priceTracker = {
 
       await storage.setItem(SUMMARY_CACHE_KEY, cache);
     } catch (e) {
-      console.error('[Summary Cache] Error saving cache:', e);
+      logger.error('[Summary Cache] Error saving cache:', e);
     }
   },
 
@@ -610,7 +612,7 @@ export const priceTracker = {
       );
 
       if (!response.ok) {
-        console.error(`Polygon API error for ${symbol}: ${response.status}`);
+        logger.error(`Polygon API error for ${symbol}: ${response.status}`);
         return null;
       }
 
@@ -626,7 +628,7 @@ export const priceTracker = {
 
       return null;
     } catch (error) {
-      console.error(`Error fetching option price for ${symbol}:`, error);
+      logger.error(`Error fetching option price for ${symbol}:`, error);
       return null;
     }
   },
@@ -688,7 +690,7 @@ export const priceTracker = {
         // Small delay between requests to be respectful
         await sleep(200);
       } catch (error) {
-        console.error(`Error fetching price for ${trade.ticker} option:`, error);
+        logger.error(`Error fetching price for ${trade.ticker} option:`, error);
         results.failed.push(trade.ticker);
       }
     }

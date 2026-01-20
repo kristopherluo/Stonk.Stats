@@ -16,6 +16,10 @@ import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
 import * as marketHours from '../../utils/marketHours.js';
 import { priceTracker } from '../../core/priceTracker.js';
 import { getTradesOpenOnDate, getTradeEntryDateString } from '../../utils/tradeUtils.js';
+import { generateOptionKeyFromTrade } from '../../utils/optionKeyUtils.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('EquityCurveManager');
 
 class EquityCurveManager {
   constructor() {
@@ -29,7 +33,7 @@ class EquityCurveManager {
    */
   async buildEquityCurve(filterStartDate = null, filterEndDate = null) {
     if (this.isBuilding) {
-      console.warn('[EquityCurve] Already building, skipping duplicate request');
+      logger.warn('[EquityCurve] Already building, skipping duplicate request');
       return this.equityCurve;
     }
 
@@ -59,7 +63,7 @@ class EquityCurveManager {
         // 1. unrealizedPnL is 0 (could be legitimate break-even)
         // 2. positionsOwned is empty (definitely wrong if we have open trades)
         if (cachedData && cachedData.unrealizedPnL === 0 && (!cachedData.positionsOwned || cachedData.positionsOwned.length === 0)) {
-          console.warn('[EquityCurve] Stale cache detected (no positions but have open trades), clearing and refetching...');
+          logger.warn('[EquityCurve] Stale cache detected (no positions but have open trades), clearing and refetching...');
           localStorage.removeItem('eodCache');
         }
       }
@@ -77,7 +81,7 @@ class EquityCurveManager {
       return this.equityCurve;
 
     } catch (error) {
-      console.error('[EquityCurve] Error building curve:', error);
+      logger.error('[EquityCurve] Error building curve:', error);
       this.equityCurve = {};
       return this.equityCurve;
     } finally {
@@ -103,7 +107,7 @@ class EquityCurveManager {
     const missingDays = eodCacheManager.findMissingDays(startDate, endDate);
 
     if (missingDays.length === 0) {
-      console.log('[EquityCurve] No missing days, using cached data');
+      logger.debug('[EquityCurve] No missing days, using cached data');
       if (onProgress) onProgress({ progress: 100, complete: true });
       return this._buildCurveFromEODCache(startDate, endDate);
     }
@@ -112,7 +116,7 @@ class EquityCurveManager {
     const chunkSize = 5;
     const chunks = this._splitIntoChunks(missingDays.reverse(), chunkSize); // Reverse to load recent first
 
-    console.log(`[EquityCurve] Incrementally loading ${missingDays.length} days in ${chunks.length} chunks`);
+    logger.debug(`[EquityCurve] Incrementally loading ${missingDays.length} days in ${chunks.length} chunks`);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -122,7 +126,7 @@ class EquityCurveManager {
 
       // Report progress
       const progress = ((i + 1) / chunks.length) * 100;
-      console.log(`[EquityCurve] Progress: ${progress.toFixed(0)}% (${i + 1}/${chunks.length} chunks)`);
+      logger.debug(`[EquityCurve] Progress: ${progress.toFixed(0)}% (${i + 1}/${chunks.length} chunks)`);
 
       if (onProgress) {
         onProgress({
@@ -155,14 +159,14 @@ class EquityCurveManager {
    * Used when past trades are added/edited/deleted
    */
   async waterfallUpdate(startDate) {
-    console.log(`[EquityCurve] Waterfall updating from ${startDate}`);
+    logger.debug(`[EquityCurve] Waterfall updating from ${startDate}`);
 
     const endDate = marketHours.formatDate(getCurrentWeekday());
 
     // Get all days that need recalculation
     const daysToUpdate = marketHours.getBusinessDaysBetween(startDate, endDate);
 
-    console.log(`[EquityCurve] Updating ${daysToUpdate.length} days`);
+    logger.debug(`[EquityCurve] Updating ${daysToUpdate.length} days`);
 
     // Check if we have historical prices for all needed tickers
     const tickersByDay = this._getOpenPositionsByDay(daysToUpdate);
@@ -185,7 +189,7 @@ class EquityCurveManager {
 
     // Fetch missing prices
     if (tickersToFetch.length > 0) {
-      console.log(`[EquityCurve] Fetching ${tickersToFetch.length} tickers from Twelve Data`);
+      logger.debug(`[EquityCurve] Fetching ${tickersToFetch.length} tickers from Twelve Data`);
       const tickerDates = this._getOldestTradeDates(tickersToFetch);
       await historicalPricesBatcher.batchFetchPrices(tickersToFetch, null, tickerDates);
     }
@@ -214,7 +218,7 @@ class EquityCurveManager {
     const affectedStartDate = this._getTradeAffectedStartDate(trade);
 
     if (affectedStartDate) {
-      console.log(`[EquityCurve] Trade changed, will waterfall update from ${affectedStartDate}`);
+      logger.debug(`[EquityCurve] Trade changed, will waterfall update from ${affectedStartDate}`);
       // Mark days as needing recalculation
       eodCacheManager.invalidateDaysFromDate(affectedStartDate);
     }
@@ -226,7 +230,7 @@ class EquityCurveManager {
    * Used when cash flow or other changes affect historical data
    */
   invalidateFromDate(dateStr) {
-    console.log(`[EquityCurve] Invalidating from date: ${dateStr}`);
+    logger.debug(`[EquityCurve] Invalidating from date: ${dateStr}`);
     eodCacheManager.invalidateDaysFromDate(dateStr);
   }
 
@@ -386,7 +390,7 @@ class EquityCurveManager {
     if (missingDays.length === 0) return;
 
     const isIncompleteRetry = incompleteDaysData !== null;
-    console.log(`[EquityCurve] Filling ${missingDays.length} ${isIncompleteRetry ? 'incomplete' : 'missing'} days`);
+    logger.debug(`[EquityCurve] Filling ${missingDays.length} ${isIncompleteRetry ? 'incomplete' : 'missing'} days`);
 
     // For each missing day, determine which stocks were open
     const tickersByDay = this._getOpenPositionsByDay(missingDays);
@@ -404,7 +408,7 @@ class EquityCurveManager {
           }
         }
       }
-      console.log(`[EquityCurve] Incomplete retry: only fetching ${allTickers.size} missing tickers`);
+      logger.debug(`[EquityCurve] Incomplete retry: only fetching ${allTickers.size} missing tickers`);
     } else {
       // For new missing days, fetch all tickers
       for (const day of missingDays) {
@@ -415,7 +419,7 @@ class EquityCurveManager {
     }
 
     if (allTickers.size === 0) {
-      console.log('[EquityCurve] No positions open on missing days, saving balance-only snapshots');
+      logger.debug('[EquityCurve] No positions open on missing days, saving balance-only snapshots');
 
       // Still save EOD data for these days (just with no positions/unrealized P&L)
       for (const day of missingDays) {
@@ -442,7 +446,7 @@ class EquityCurveManager {
 
     // Fetch missing prices from Twelve Data
     if (tickersToFetch.length > 0) {
-      console.log(`[EquityCurve] Fetching ${tickersToFetch.length} tickers from Twelve Data`);
+      logger.debug(`[EquityCurve] Fetching ${tickersToFetch.length} tickers from Twelve Data`);
       const tickerDates = this._getOldestTradeDates(tickersToFetch);
       await historicalPricesBatcher.batchFetchPrices(tickersToFetch, null, tickerDates);
     }
@@ -473,7 +477,7 @@ class EquityCurveManager {
       eodCacheManager.saveEODSnapshot(day, tempEODData[day]);
     }
 
-    console.log(`[EquityCurve] Atomic save: saved ${Object.keys(tempEODData).length} days to cache`);
+    logger.debug(`[EquityCurve] Atomic save: saved ${Object.keys(tempEODData).length} days to cache`);
 
     // Emit event so header/settings can recalculate with new EOD data
     state.emit('eodDataSaved', { days: Object.keys(tempEODData) });
@@ -517,7 +521,7 @@ class EquityCurveManager {
         for (const trade of tradesForTicker) {
           if (trade.assetType === 'options') {
             // Create unique key for this option contract
-            const optionKey = `${trade.ticker}_${trade.strike}_${trade.expirationDate}_${trade.optionType}`;
+            const optionKey = generateOptionKeyFromTrade(trade);
 
             if (isToday) {
               // Fetch live option premium
@@ -542,7 +546,7 @@ class EquityCurveManager {
               prices[ticker] = price;
             } else {
               missingTickers.push(ticker);
-              console.warn(`[EquityCurve] Missing price for ${ticker} on ${dateStr}`);
+              logger.warn(`[EquityCurve] Missing price for ${ticker} on ${dateStr}`);
             }
           }
         }
@@ -553,7 +557,7 @@ class EquityCurveManager {
           prices[ticker] = price;
         } else {
           missingTickers.push(ticker);
-          console.warn(`[EquityCurve] Missing price for ${ticker} on ${dateStr}`);
+          logger.warn(`[EquityCurve] Missing price for ${ticker} on ${dateStr}`);
         }
       }
     }
@@ -614,15 +618,15 @@ class EquityCurveManager {
 
     if (daysToRetry.length === 0) {
       const skippedCount = incompleteDays.length;
-      console.log(`[EquityCurve] ${skippedCount} incomplete days skipped (exceeded ${MAX_RETRIES} retry limit)`);
+      logger.debug(`[EquityCurve] ${skippedCount} incomplete days skipped (exceeded ${MAX_RETRIES} retry limit)`);
       return;
     }
 
     const skippedCount = incompleteDays.length - daysToRetry.length;
     if (skippedCount > 0) {
-      console.log(`[EquityCurve] Retrying ${daysToRetry.length} incomplete days (skipped ${skippedCount} with too many retries)`);
+      logger.debug(`[EquityCurve] Retrying ${daysToRetry.length} incomplete days (skipped ${skippedCount} with too many retries)`);
     } else {
-      console.log(`[EquityCurve] Found ${incompleteDays.length} incomplete days, backfilling`);
+      logger.debug(`[EquityCurve] Found ${incompleteDays.length} incomplete days, backfilling`);
     }
 
     // Process each incomplete day individually with its specific missing tickers
@@ -631,11 +635,11 @@ class EquityCurveManager {
       const missingTickers = data.missingTickers || [];
 
       if (missingTickers.length === 0) {
-        console.warn(`[EquityCurve] Incomplete day ${date} has no missingTickers list, skipping`);
+        logger.warn(`[EquityCurve] Incomplete day ${date} has no missingTickers list, skipping`);
         continue;
       }
 
-      console.log(`[EquityCurve] Retrying ${date} with ${missingTickers.length} missing tickers:`, missingTickers.join(', '));
+      logger.debug(`[EquityCurve] Retrying ${date} with ${missingTickers.length} missing tickers:`, missingTickers.join(', '));
 
       // Fetch only the missing tickers for this specific day
       await this._fillMissingEODData([date], { [date]: { missingTickers, existingData: data } });
@@ -783,7 +787,7 @@ class EquityCurveManager {
         cashFlow: result.cashFlow
       };
     } catch (error) {
-      console.error('[EquityCurve] Error calculating current balance:', error);
+      logger.error('[EquityCurve] Error calculating current balance:', error);
       return null;
     }
   }

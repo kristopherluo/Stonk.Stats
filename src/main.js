@@ -19,6 +19,9 @@ import { positionsView } from './features/positions/positionsView.js';
 import { journalView } from './features/journal/journalView.js';
 import { historicalPricesBatcher } from './features/stats/HistoricalPricesBatcher.js';
 import { formatDate } from './utils/marketHours.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('App');
 
 class App {
   constructor() {
@@ -26,7 +29,7 @@ class App {
   }
 
   async init() {
-    console.log('Initializing TradeDeck...');
+    logger.info('Initializing TradeDeck...');
 
     // Initialize settings FIRST (loads saved data from IndexedDB)
     await settings.init();
@@ -54,7 +57,7 @@ class App {
           settings.updateAccountDisplay(state.account.currentSize);
         })
         .catch((error) => {
-          console.error('Failed to fetch prices on load:', error);
+          logger.error('Failed to fetch prices on load:', error);
           settings.setAccountLoading(false);
           settings.updateAccountDisplay(state.account.currentSize);
         });
@@ -122,7 +125,7 @@ class App {
     // Expose global functions for HTML onclick handlers
     this.setupGlobalFunctions();
 
-    console.log('TradeDeck initialized successfully');
+    logger.info('TradeDeck initialized successfully');
   }
 
   /**
@@ -145,10 +148,10 @@ class App {
       );
 
       if (removedCount > 0) {
-        console.log(`[Startup] Hot window cleanup complete: removed ${removedCount} old price data points`);
+        logger.debug(`Hot window cleanup complete: removed ${removedCount} old price data points`);
       }
     } catch (error) {
-      console.error('[Startup] Error during proactive cleanup:', error);
+      logger.error('Error during proactive cleanup:', error);
     }
   }
 
@@ -191,8 +194,8 @@ class App {
 
     // Debug logging in development
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      state.on('settingsChanged', (s) => console.log('Settings:', s));
-      state.on('tradeChanged', (t) => console.log('Trade:', t));
+      state.on('settingsChanged', (s) => logger.debug('Settings:', s));
+      state.on('tradeChanged', (t) => logger.debug('Trade:', t));
     }
   }
 

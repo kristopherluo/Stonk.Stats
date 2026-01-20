@@ -31,9 +31,12 @@
 import { formatDate, isBusinessDay, getBusinessDaysBetween, parseDate } from '../utils/marketHours.js';
 import { storage } from '../utils/storage.js';
 import { STORAGE_LIMITS, CACHE_KEYS, TIME_CONSTANTS } from '../constants/index.js';
+import { createLogger } from '../utils/logger.js';
 
 const CACHE_KEY = CACHE_KEYS.EOD_CACHE;
 const CACHE_VERSION = 1;
+
+const logger = createLogger('EODCacheManager');
 
 class EODCacheManager {
   constructor() {
@@ -66,7 +69,7 @@ class EODCacheManager {
 
       // Version check
       if (cache.version !== CACHE_VERSION) {
-        console.warn(`EOD cache version mismatch. Expected ${CACHE_VERSION}, got ${cache.version}. Resetting cache.`);
+        logger.warn(`EOD cache version mismatch. Expected ${CACHE_VERSION}, got ${cache.version}. Resetting cache.`);
         return this._createEmptyCache();
       }
 
@@ -75,7 +78,7 @@ class EODCacheManager {
 
       return validatedCache;
     } catch (error) {
-      console.error('Error loading EOD cache:', error);
+      logger.error('Error loading EOD cache:', error);
       return this._createEmptyCache();
     }
   }
@@ -88,7 +91,7 @@ class EODCacheManager {
    */
   async _validateAndCleanCache(cache) {
     if (!cache.days || typeof cache.days !== 'object') {
-      console.error('[EODCache] Corrupted cache: missing or invalid days object');
+      logger.error('[EODCache] Corrupted cache: missing or invalid days object');
       return this._createEmptyCache();
     }
 
@@ -105,12 +108,12 @@ class EODCacheManager {
     }
 
     if (corruptedDays.length > 0) {
-      console.warn(`[EODCache] Removed ${corruptedDays.length} corrupted days:`, corruptedDays);
+      logger.warn(`[EODCache] Removed ${corruptedDays.length} corrupted days:`, corruptedDays);
       // Save cleaned cache
       try {
         await storage.setItem(CACHE_KEY, cache);
       } catch (error) {
-        console.error('[EODCache] Failed to save cleaned cache:', error);
+        logger.error('[EODCache] Failed to save cleaned cache:', error);
       }
     }
 
@@ -127,7 +130,7 @@ class EODCacheManager {
   _validateEODData(data, dateStr) {
     // Check if data exists
     if (!data || typeof data !== 'object') {
-      console.warn(`[EODCache] Invalid data for ${dateStr}: not an object`);
+      logger.warn(`[EODCache] Invalid data for ${dateStr}: not an object`);
       return false;
     }
 
@@ -135,29 +138,29 @@ class EODCacheManager {
     const requiredFields = ['balance', 'unrealizedPnL', 'stockPrices', 'positionsOwned'];
     for (const field of requiredFields) {
       if (!(field in data)) {
-        console.warn(`[EODCache] Invalid data for ${dateStr}: missing field '${field}'`);
+        logger.warn(`[EODCache] Invalid data for ${dateStr}: missing field '${field}'`);
         return false;
       }
     }
 
     // Check data types
     if (typeof data.balance !== 'number' || isNaN(data.balance)) {
-      console.warn(`[EODCache] Invalid data for ${dateStr}: balance is not a valid number`);
+      logger.warn(`[EODCache] Invalid data for ${dateStr}: balance is not a valid number`);
       return false;
     }
 
     if (typeof data.unrealizedPnL !== 'number' || isNaN(data.unrealizedPnL)) {
-      console.warn(`[EODCache] Invalid data for ${dateStr}: unrealizedPnL is not a valid number`);
+      logger.warn(`[EODCache] Invalid data for ${dateStr}: unrealizedPnL is not a valid number`);
       return false;
     }
 
     if (typeof data.stockPrices !== 'object' || data.stockPrices === null) {
-      console.warn(`[EODCache] Invalid data for ${dateStr}: stockPrices is not an object`);
+      logger.warn(`[EODCache] Invalid data for ${dateStr}: stockPrices is not an object`);
       return false;
     }
 
     if (!Array.isArray(data.positionsOwned)) {
-      console.warn(`[EODCache] Invalid data for ${dateStr}: positionsOwned is not an array`);
+      logger.warn(`[EODCache] Invalid data for ${dateStr}: positionsOwned is not an array`);
       return false;
     }
 
@@ -170,7 +173,7 @@ class EODCacheManager {
       // For complete data, verify all positions have prices
       for (const ticker of data.positionsOwned) {
         if (!(ticker in data.stockPrices)) {
-          console.warn(`[EODCache] Invalid data for ${dateStr}: position '${ticker}' missing from stockPrices`);
+          logger.warn(`[EODCache] Invalid data for ${dateStr}: position '${ticker}' missing from stockPrices`);
           return false;
         }
       }
@@ -200,7 +203,7 @@ class EODCacheManager {
     try {
       await storage.setItem(CACHE_KEY, this.cache);
     } catch (error) {
-      console.error('Error saving EOD cache:', error);
+      logger.error('Error saving EOD cache:', error);
     }
   }
 
@@ -231,13 +234,13 @@ class EODCacheManager {
    */
   saveEODSnapshot(dateStr, data) {
     if (!isBusinessDay(dateStr)) {
-      console.warn(`Attempted to save EOD snapshot for non-business day: ${dateStr}`);
+      logger.warn(`Attempted to save EOD snapshot for non-business day: ${dateStr}`);
       return;
     }
 
     // Validate required fields
     if (typeof data.balance !== 'number') {
-      console.error('Invalid EOD snapshot: balance is required');
+      logger.error('Invalid EOD snapshot: balance is required');
       return;
     }
 
@@ -268,7 +271,7 @@ class EODCacheManager {
 
     // Only log significant events (Finnhub saves or incomplete data)
     if (data.source === 'finnhub' || data.incomplete) {
-      console.log(`Saved EOD snapshot for ${dateStr}:`, {
+      logger.debug(`Saved EOD snapshot for ${dateStr}:`, {
         balance: data.balance,
         source: data.source,
         incomplete: data.incomplete
@@ -341,7 +344,7 @@ class EODCacheManager {
       savedCount++;
     }
 
-    console.log(`Bulk saved ${savedCount} EOD snapshots`);
+    logger.debug(`Bulk saved ${savedCount} EOD snapshots`);
   }
 
   /**
@@ -394,7 +397,7 @@ class EODCacheManager {
     }
 
     this._saveCache();
-    console.log(`Invalidated (deleted) ${invalidatedCount} days from ${startDate}`);
+    logger.debug(`Invalidated (deleted) ${invalidatedCount} days from ${startDate}`);
 
     return invalidatedCount;
   }
@@ -442,7 +445,7 @@ class EODCacheManager {
     if (this.cache.days[dateStr]) {
       delete this.cache.days[dateStr];
       await this._saveCache();
-      console.log(`Deleted EOD data for ${dateStr}`);
+      logger.debug(`Deleted EOD data for ${dateStr}`);
     }
   }
 
@@ -452,7 +455,7 @@ class EODCacheManager {
   async clearAllData() {
     this.cache = this._createEmptyCache();
     await this._saveCache();
-    console.log('Cleared all EOD cache data');
+    logger.debug('Cleared all EOD cache data');
   }
 
   /**
@@ -475,7 +478,7 @@ class EODCacheManager {
 
     if (deletedCount > 0) {
       await this._saveCache();
-      console.log(`Cleaned up ${deletedCount} days of EOD data older than ${cutoffDate}`);
+      logger.debug(`Cleaned up ${deletedCount} days of EOD data older than ${cutoffDate}`);
     }
 
     return deletedCount;
@@ -516,13 +519,13 @@ class EODCacheManager {
    */
   async importData(cacheData) {
     if (cacheData.version !== CACHE_VERSION) {
-      console.error('Cannot import cache: version mismatch');
+      logger.error('Cannot import cache: version mismatch');
       return false;
     }
 
     this.cache = cacheData;
     await this._saveCache();
-    console.log('Imported EOD cache data');
+    logger.debug('Imported EOD cache data');
     return true;
   }
 }

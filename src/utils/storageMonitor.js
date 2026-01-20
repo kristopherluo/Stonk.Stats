@@ -4,6 +4,10 @@
 
 import { storage } from './storage.js';
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('StorageMonitor');
+
 /**
  * Get total IndexedDB usage breakdown
  * @returns {Promise<Object>} Storage usage info
@@ -65,7 +69,7 @@ export async function getStorageUsage() {
       warningLevel: getWarningLevel(usage.totalSize, limit)
     };
   } catch (error) {
-    console.error('[StorageMonitor] Error getting storage usage:', error);
+    logger.error('[StorageMonitor] Error getting storage usage:', error);
 
     // Return safe defaults on error
     const limit = 50 * 1024 * 1024;

@@ -3,6 +3,10 @@
  * Reduces storage size by 50-70% for text fields
  */
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('Compression');
+
 /**
  * Compress a string for localStorage storage
  * @param {string} text - Text to compress
@@ -22,7 +26,7 @@ export function compressText(text) {
     }
     return text;
   } catch (error) {
-    console.error('Compression error:', error);
+    logger.error('Compression error:', error);
     return text; // Return original on error
   }
 }
@@ -46,7 +50,7 @@ export function decompressText(text) {
 
     return decompressed;
   } catch (error) {
-    console.error('Decompression error:', error);
+    logger.error('Decompression error:', error);
     return text; // Return original on error
   }
 }

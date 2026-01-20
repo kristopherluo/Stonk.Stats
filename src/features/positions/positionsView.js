@@ -12,6 +12,8 @@ import { showToast } from '../../components/ui/ui.js';
 import { sharedMetrics } from '../../shared/SharedMetrics.js';
 import { FilterPopup } from '../../shared/FilterPopup.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('PositionsView');
 
 class PositionsView {
   constructor() {
@@ -831,13 +833,13 @@ class PositionsView {
       }
 
       if (totalFailed > 0) {
-        console.error('Failed to fetch some prices:', { stocks: results.failed, options: optionsResults.failed });
+        logger.error('Failed to fetch some prices:', { stocks: results.failed, options: optionsResults.failed });
         if (!isAutoRefresh) {
           showToast(`Failed to fetch ${totalFailed} price${totalFailed > 1 ? 's' : ''}`, 'warning');
         }
       }
     } catch (error) {
-      console.error('Price refresh error:', error);
+      logger.error('Price refresh error:', error);
       if (!isAutoRefresh) {
         showToast('Failed to fetch prices: ' + error.message, 'error');
       }

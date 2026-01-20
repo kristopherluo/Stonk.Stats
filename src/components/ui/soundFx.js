@@ -3,6 +3,8 @@
  */
 
 import { state } from '../../core/state.js';
+import { createLogger } from '../../utils/logger.js';
+const logger = createLogger('SoundFX');
 
 class SoundFX {
   constructor() {
@@ -199,11 +201,11 @@ window.testSound = (type) => {
     case 'click': soundFx.playClick(); break;
     case 'celebration': soundFx.playCelebration(); break;
     default:
-      console.log('Usage: testSound("success" | "click" | "celebration")');
+      logger.debug('Usage: testSound("success" | "click" | "celebration")');
       soundFx.enabled = original;
       return;
   }
 
   soundFx.enabled = original;
-  console.log(`Played: ${type}`);
+  logger.debug(`Played: ${type}`);
 };
