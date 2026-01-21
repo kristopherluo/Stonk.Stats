@@ -102,6 +102,7 @@ class Stats {
 
     // Initialize P&L calendar
     this.calendar = pnlCalendar;
+    this.calendar.statsCalculator = this.calculator; // Give calendar access to live balance calculation
     this.calendar.onDayClick = (dateStr, weekRange) => this.handleCalendarDayClick(dateStr, weekRange);
 
     // Note: Calendar init is async, but we don't await it here to avoid blocking

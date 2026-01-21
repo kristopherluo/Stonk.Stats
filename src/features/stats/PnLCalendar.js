@@ -6,6 +6,7 @@
 import { state } from '../../core/state.js';
 import { equityCurveManager } from './EquityCurveManager.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
+import { getCurrentWeekday } from '../../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 const logger = createLogger('PnLCalendar');
 import * as marketHours from '../../utils/marketHours.js';
@@ -16,6 +17,7 @@ class PnLCalendar {
     this.containerId = options.containerId || 'pnlCalendar';
     this.onDayClick = options.onDayClick || null;
     this.showWeekends = options.showWeekends ?? true;
+    this.statsCalculator = null; // Set by stats.js after initialization
 
     // State
     this.currentYear = null;
@@ -128,15 +130,28 @@ class PnLCalendar {
         const prevDate = this._getPreviousBusinessDay(day.date);
         const prevDateStr = prevDate ? marketHours.formatDate(prevDate) : null;
 
-        // Get balance for this day from EOD cache (not equity curve manager)
-        // This ensures we get unfiltered data regardless of stats page date filter
-        const eodData = eodCacheManager.getEODData(dateStr);
-        if (!eodData || eodData.incomplete) {
-          continue;
+        // Use centralized balance provider (single source of truth for today vs historical)
+        let balance = null;
+        let cashFlow = 0;
+
+        if (this.statsCalculator) {
+          // Delegate to StatsCalculator.getBalanceForDate() - single source of truth
+          balance = this.statsCalculator.getBalanceForDate(dateStr);
+
+          // Get cash flow from EOD cache (only available for historical dates)
+          const today = marketHours.formatDate(getCurrentWeekday());
+          if (dateStr !== today) {
+            const eodData = eodCacheManager.getEODData(dateStr);
+            if (eodData) {
+              cashFlow = eodData.cashFlow || 0;
+            }
+          }
         }
 
-        const balance = eodData.balance;
-        const cashFlow = eodData.cashFlow || 0;
+        // Skip if no balance available
+        if (balance === null) {
+          continue;
+        }
 
         // Get previous day balance
         let prevBalance;
@@ -260,6 +275,11 @@ class PnLCalendar {
       if (isToday) classes.push('pnl-calendar__cell--today');
       if (isFuture) classes.push('pnl-calendar__cell--future');
       if (isWeekend) classes.push('pnl-calendar__cell--weekend');
+
+      // Restore selected state if this date matches the currently selected date
+      if (this.selectedDate && dateStr === this.selectedDate) {
+        classes.push('pnl-calendar__cell--selected');
+      }
 
       // Add P&L color class
       if (pnlValue !== null && pnlValue !== undefined) {

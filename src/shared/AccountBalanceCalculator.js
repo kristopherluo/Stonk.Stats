@@ -271,6 +271,7 @@ class AccountBalanceCalculator {
 
   /**
    * Get trades that were closed on or before a specific date
+   * Includes both closed trades (with exitDate) and trimmed trades (with trimHistory)
    * @param {Array} allTrades - All trades
    * @param {string} dateStr - Date in 'YYYY-MM-DD' format
    * @returns {Array} Trades closed by date
@@ -278,7 +279,25 @@ class AccountBalanceCalculator {
    */
   _getTradesClosedByDate(allTrades, dateStr) {
     return allTrades.filter(trade => {
-      return trade.exitDate && trade.exitDate <= dateStr;
+      // For closed trades, check exitDate
+      if (trade.status === 'closed' && trade.exitDate) {
+        // Extract date part from ISO timestamp (e.g., "2026-01-20T18:00:00.000Z" -> "2026-01-20")
+        const exitDateStr = trade.exitDate.split('T')[0];
+        return exitDateStr <= dateStr;
+      }
+
+      // For trimmed trades, check if they have ANY trims on or before this date
+      if (trade.status === 'trimmed' && trade.trimHistory && trade.trimHistory.length > 0) {
+        // A trimmed trade is "closed" (has realized P&L) if it has at least one trim
+        // The trade is included if ANY trim happened on or before dateStr
+        const hasTrimsBeforeDate = trade.trimHistory.some(trim => {
+          const trimDateStr = trim.date.split('T')[0];  // Handle ISO timestamps
+          return trimDateStr <= dateStr;
+        });
+        return hasTrimsBeforeDate;
+      }
+
+      return false;
     });
   }
 

@@ -17,18 +17,11 @@ export class StatsCalculator {
   /**
    * Calculate current account balance (includes unrealized P&L)
    * Always uses ALL trades, not filtered
-   * NOW USES SHARED CALCULATOR
+   * ALWAYS uses live prices to ensure accuracy (never trust cached EOD for today)
    */
   calculateCurrentAccount() {
-    // Check if we have today's complete EOD snapshot (after market close)
-    const todayStr = formatDate(getCurrentWeekday());
-    const eodData = eodCacheManager.getEODData(todayStr);
-
-    if (eodData && !eodData.incomplete) {
-      return eodData.balance;
-    }
-
-    // Fallback: Calculate with live prices (during market hours before EOD saved)
+    // Always calculate with live prices for current account
+    // EOD cache may have stale option prices, so we always use fresh data
     const currentPrices = priceTracker.getPricesAsObject();
 
     const result = accountBalanceCalculator.calculateCurrentBalance({
@@ -39,6 +32,35 @@ export class StatsCalculator {
     });
 
     return result.balance;
+  }
+
+  /**
+   * CENTRALIZED: Get balance for any date (single source of truth)
+   * For today: uses live prices
+   * For historical dates: uses EOD cache
+   *
+   * This is the ONLY method that should decide whether to use live vs cached data.
+   * All components (EquityCurveManager, PnLCalendar, etc) should call this method.
+   *
+   * @param {string} dateStr - Date in 'YYYY-MM-DD' format
+   * @returns {number|null} Balance or null if unavailable
+   */
+  getBalanceForDate(dateStr) {
+    const todayStr = formatDate(getCurrentWeekday());
+
+    // For today, always use live calculation
+    if (dateStr === todayStr) {
+      return this.calculateCurrentAccount();
+    }
+
+    // For historical dates, try EOD cache first
+    const eodData = eodCacheManager.getEODData(dateStr);
+    if (eodData && !eodData.incomplete) {
+      return eodData.balance;
+    }
+
+    // If no cache data, return null (caller should handle)
+    return null;
   }
 
   /**
@@ -191,16 +213,15 @@ export class StatsCalculator {
       startDateStr = dayBeforeStr;
     }
 
-    // Determine end balance
-    let endBalance;
+    // Determine end balance using centralized method
     const endDateStr = dateTo || formatDate(getCurrentWeekday());
 
-    // Get balance from equity curve
-    endBalance = equityCurveManager.getBalanceOnDate(endDateStr);
+    // Use centralized balance provider (single source of truth)
+    let endBalance = this.getBalanceForDate(endDateStr);
 
-    // If not in curve yet, fall back to current account for today
+    // If no cached data for historical date, fall back to manual calculation
     if (endBalance === null) {
-      endBalance = this.calculateCurrentAccount();
+      endBalance = this._calculateBalanceAtDate(endDateStr);
     }
 
     // Calculate net cash flow in range

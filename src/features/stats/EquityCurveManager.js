@@ -280,22 +280,13 @@ class EquityCurveManager {
   /**
    * Get curve point for a specific date
    * Returns null if data unavailable
+   *
+   * NOTE: This logic is duplicated from StatsCalculator.getBalanceForDate()
+   * TODO: Extract to shared utility or use dependency injection to eliminate duplication
+   * Any changes to "today vs historical" logic must be made in both places
    */
   _getCurvePointForDate(dateStr, todayStr) {
-    // Check if EOD data exists for this date (including today after market close)
-    const eodData = eodCacheManager.getEODData(dateStr);
-    if (eodData && !eodData.incomplete) {
-      // Use EOD cache data (works for both past dates and today after market close)
-      return this._createCurvePoint(
-        eodData.balance,
-        eodData.realizedBalance,
-        eodData.unrealizedPnL,
-        eodData.cashFlow,
-        dateStr
-      );
-    }
-
-    // Today (or date) without EOD data: use current/live prices
+    // For today, always use live prices (never trust cached EOD data)
     if (dateStr === todayStr) {
       // Skip if we have active trades but no price data (prevents $0 unrealized P&L)
       const activeTrades = getOpenTrades(state.journal.entries);
@@ -311,6 +302,18 @@ class EquityCurveManager {
         currentBalance.realizedBalance,
         currentBalance.unrealizedPnL,
         currentBalance.cashFlow,
+        dateStr
+      );
+    }
+
+    // For historical dates, use EOD cache
+    const eodData = eodCacheManager.getEODData(dateStr);
+    if (eodData && !eodData.incomplete) {
+      return this._createCurvePoint(
+        eodData.balance,
+        eodData.realizedBalance,
+        eodData.unrealizedPnL,
+        eodData.cashFlow,
         dateStr
       );
     }
