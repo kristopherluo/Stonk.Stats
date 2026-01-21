@@ -81,9 +81,8 @@ class PositionsView {
 
       if (data.to === 'positions') {
         this.hasAnimated = false; // Reset animation flag when entering view
-        setTimeout(() => {
-          this.render();
-        }, 100); // Wait for viewManager animation to complete
+        // Render immediately - view transition animation covers the initial render
+        this.render();
         this.startAutoRefresh(true); // Pass true to skip immediate refresh
       }
     });
@@ -468,37 +467,39 @@ class PositionsView {
   async renderGrid(positions, shouldAnimate) {
     if (!this.elements.grid) return;
 
-    // Fetch all company data upfront with rate limiting
+    // Fetch all company data in parallel with controlled rate limiting
     const companyDataMap = new Map();
 
     // Get unique tickers to avoid duplicate fetches
     const uniqueTickers = [...new Set(positions.map(t => t.ticker))];
 
-    // Fetch with rate limiting (200ms delay between requests to avoid API limits)
-    for (const ticker of uniqueTickers) {
+    // Parallel fetch with staggered start to maintain rate limiting (50ms stagger per ticker)
+    const fetchPromises = uniqueTickers.map(async (ticker, index) => {
+      // Stagger start by 50ms per ticker (gentler than 200ms sequential blocking)
+      await new Promise(resolve => setTimeout(resolve, index * 50));
+
       let data = await priceTracker.getCachedCompanyData(ticker);
 
-      // If we have data but it's missing industry (only has summary from Alpha Vantage),
-      // fetch the full profile from Finnhub
-      if (data && !data.industry) {
+      // If we have data but it's missing industry, or no data at all, fetch full profile
+      if (!data || !data.industry) {
         const profile = await priceTracker.fetchCompanyProfile(ticker);
         if (profile) {
           data = profile;
         }
-        await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit delay
-      } else if (!data) {
-        // No data at all, try to fetch profile
-        const profile = await priceTracker.fetchCompanyProfile(ticker);
-        if (profile) {
-          data = profile;
-        }
-        await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit delay
       }
 
+      return { ticker, data };
+    });
+
+    // Wait for all fetches to complete in parallel
+    const results = await Promise.all(fetchPromises);
+
+    // Populate map with fetched data
+    results.forEach(({ ticker, data }) => {
       if (data && data.industry) {
         companyDataMap.set(ticker, data);
       }
-    }
+    });
 
     this.elements.grid.innerHTML = positions.map(trade => {
       const isOptions = trade.assetType === 'options';

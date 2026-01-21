@@ -113,7 +113,21 @@ export const dataManager = {
             return;
           }
 
-          // Write everything directly to IndexedDB
+          // Clear existing journal data to prevent conflicts with imported data
+          // Get existing index first, before clearing it
+          const existingIndex = await storage.getItem('riskCalcJournalIndex');
+
+          // Clear individual trade keys from old local data
+          if (existingIndex && Array.isArray(existingIndex)) {
+            for (const id of existingIndex) {
+              await storage.removeItem(`trade_${id}`);
+            }
+          }
+
+          // Clear the index - this will force migration to run on reload
+          await storage.removeItem('riskCalcJournalIndex');
+
+          // Write imported data to IndexedDB
           await storage.setItem('riskCalcSettings', data.settings);
           await storage.setItem('riskCalcJournal', data.journal || []);
 
