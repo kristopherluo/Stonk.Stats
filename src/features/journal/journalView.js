@@ -112,8 +112,10 @@ class JournalView {
 
       if (data.to === 'journal') {
         this.hasAnimated = false; // Reset animation flag when entering view
-        setTimeout(() => {
-          this.render();
+        this.isReadyForScroll = false; // Flag to indicate render is in progress
+        setTimeout(async () => {
+          await this.render();
+          this.isReadyForScroll = true; // Render complete
         }, 100); // Wait for viewManager animation to complete (200ms + buffer)
       }
     });
@@ -416,6 +418,10 @@ class JournalView {
       // Set internal filter state
       this.filters.status = 'all';
       this.filters.types = ['ep', 'long-term', 'base', 'breakout', 'bounce', 'other'];
+
+      // Reset sort to default (date descending = newest first)
+      this.sortColumn = 'date';
+      this.sortDirection = 'desc';
     }
 
     // Set date range
@@ -440,6 +446,9 @@ class JournalView {
     if (this.filterPopup) {
       this.filterPopup.updateFilterCount((dateFrom || dateTo) ? 1 : 0);
     }
+
+    // Note: Don't render here - let the viewChanged event trigger render
+    // to avoid double-rendering which causes timing issues
   }
 
   selectAllTypes() {
@@ -554,7 +563,7 @@ class JournalView {
   sortTrades(trades) {
     const direction = this.sortDirection === 'asc' ? 1 : -1;
 
-    return [...trades].sort((a, b) => {
+    const sorted = [...trades].sort((a, b) => {
       let aVal, bVal;
 
       switch (this.sortColumn) {
@@ -583,6 +592,8 @@ class JournalView {
       if (aVal > bVal) return 1 * direction;
       return 0;
     });
+
+    return sorted;
   }
 
   async render() {
@@ -1313,8 +1324,19 @@ class JournalView {
   }
 
   async renderChart(trade) {
-    const chartContainer = document.getElementById(`chart-${trade.id}`);
-    if (!chartContainer) return;
+    // Retry logic: wait for chart container to appear in DOM (handles off-screen rows)
+    let chartContainer = document.getElementById(`chart-${trade.id}`);
+    let retries = 0;
+    while (!chartContainer && retries < 8) {
+      await new Promise(resolve => setTimeout(resolve, 75));
+      chartContainer = document.getElementById(`chart-${trade.id}`);
+      retries++;
+    }
+
+    if (!chartContainer) {
+      logger.warn(`Chart container not found after retries for trade ${trade.id}`);
+      return;
+    }
 
     // Skip if chart already rendered (check if container has chart content)
     if (chartContainer.children.length > 0 && !chartContainer.querySelector('.journal-row-details__chart-loading')) {
@@ -1528,6 +1550,12 @@ class JournalView {
         to: toTime
       });
 
+      // Ensure chart fits content properly (especially when opened from stats page)
+      // Use setTimeout to let container finish any CSS transitions
+      setTimeout(() => {
+        chart.timeScale().fitContent();
+      }, 100);
+
       // Handle resize
       const resizeObserver = new ResizeObserver(entries => {
         if (entries.length === 0 || entries[0].target !== chartContainer) return;
@@ -1585,13 +1613,21 @@ class JournalView {
       return;
     }
 
-    // Find the company summary element for this trade
-    const summaryContainer = document.querySelector(`[data-company-summary="${trade.id}"]`);
-    const summarySection = document.querySelector(`[data-company-summary-section="${trade.id}"]`);
+    // Find the company summary element for this trade (with retry logic)
+    let summaryContainer = document.querySelector(`[data-company-summary="${trade.id}"]`);
+    let retries = 0;
+    while (!summaryContainer && retries < 8) {
+      await new Promise(resolve => setTimeout(resolve, 75));
+      summaryContainer = document.querySelector(`[data-company-summary="${trade.id}"]`);
+      retries++;
+    }
 
     if (!summaryContainer) {
+      logger.warn(`Summary container not found after retries for trade ${trade.id}`);
       return;
     }
+
+    const summarySection = document.querySelector(`[data-company-summary-section="${trade.id}"]`);
 
     // Show loading state
     summaryContainer.textContent = 'Loading company information...';

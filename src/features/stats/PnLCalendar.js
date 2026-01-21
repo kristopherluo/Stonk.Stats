@@ -380,7 +380,7 @@ class PnLCalendar {
     cells.forEach(cell => {
       cell.addEventListener('click', (e) => {
         const dateStr = cell.dataset.date;
-        if (dateStr && !cell.classList.contains('pnl-calendar__cell--future')) {
+        if (dateStr) {
           this.handleDayClick(dateStr);
         }
       });
@@ -619,7 +619,7 @@ class PnLCalendar {
 
     // Add selection to new day
     const newSelected = container.querySelector(`[data-date="${dateStr}"]`);
-    if (newSelected && !newSelected.classList.contains('pnl-calendar__cell--future')) {
+    if (newSelected) {
       newSelected.classList.add('pnl-calendar__cell--selected');
     }
   }

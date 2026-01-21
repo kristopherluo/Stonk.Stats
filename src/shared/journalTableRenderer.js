@@ -17,30 +17,14 @@ import { getAssetMultiplier } from '../utils/assetTypeUtils.js';
  * @param {Object} options - Rendering options
  * @param {boolean} options.shouldAnimate - Whether to apply animation classes
  * @param {Set} options.expandedRows - Set of expanded row IDs (optional)
+ * @param {boolean} options.statsPageMode - If true, render simplified columns for stats page
  * @returns {Promise<string>} HTML string for table rows
  */
 export async function renderJournalTableRows(trades, options = {}) {
-  const { shouldAnimate = false, expandedRows = new Set() } = options;
+  const { shouldAnimate = false, expandedRows = new Set(), statsPageMode = false } = options;
 
-  // Fetch company data for all tickers (to match journal table exactly)
-  const companyDataMap = new Map();
-  const uniqueTickers = [...new Set(trades.map(t => t.ticker))];
-
-  for (const ticker of uniqueTickers) {
-    let data = await priceTracker.getCachedCompanyData(ticker);
-    if (data && !data.industry) {
-      const profile = await priceTracker.fetchCompanyProfile(ticker);
-      if (profile) data = profile;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } else if (!data) {
-      const profile = await priceTracker.fetchCompanyProfile(ticker);
-      if (profile) data = profile;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    if (data && data.industry) {
-      companyDataMap.set(ticker, data);
-    }
-  }
+  // No need to fetch company data for table rows - it's only needed when expanding entries
+  // Company info (industry, etc.) will be fetched on-demand when user expands a row
 
   // Generate table rows HTML
   return trades.map((trade, index) => {
@@ -114,10 +98,6 @@ export async function renderJournalTableRows(trades, options = {}) {
       optionDisplay = `<span class="journal-option-glow">${strike}${optionSymbol} ${formattedExp}</span>`;
     }
 
-    // Get company data for industry badge
-    const companyData = companyDataMap.get(trade.ticker);
-    const industry = companyData?.industry || '';
-
     // Get trade type for badge
     const setupType = trade.thesis?.setupType;
     const typeLabels = {
@@ -136,6 +116,32 @@ export async function renderJournalTableRows(trades, options = {}) {
 
     const animationDelay = shouldAnimate ? `animation-delay: ${index * 40}ms;` : '';
 
+    // Stats page mode: simplified columns (Date, Ticker, Options, Entry, Exit, Shares, P&L $, P&L %, Status)
+    if (statsPageMode) {
+      return `
+        <tr class="journal-table__row ${shouldAnimate ? 'journal-row--animate' : ''} ${rowBgClass}" data-id="${trade.id}" style="${animationDelay}">
+          <td>${formatDate(trade.timestamp)}</td>
+          <td><strong>${trade.ticker}</strong></td>
+          <td>${optionDisplay}</td>
+          <td style="color: var(--primary);">${formatCurrency(trade.entry)}</td>
+          <td class="${exitPriceClass}">${trade.exitPrice ? formatCurrency(trade.exitPrice) : '—'}</td>
+          <td>${sharesDisplay}</td>
+          <td class="${hasPnL ? (pnl >= 0 ? 'journal-table__pnl--positive' : 'journal-table__pnl--negative') : ''}">
+            ${hasPnL ? `${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}` : '—'}
+          </td>
+          <td class="${hasPnL ? (pnlPercent >= 0 ? 'journal-table__pnl--positive' : 'journal-table__pnl--negative') : ''}">
+            ${pnlPercent !== null ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%` : '—'}
+          </td>
+          <td>
+            <span class="journal-table__status journal-table__status--${statusClass}">
+              ${statusText}
+            </span>
+          </td>
+        </tr>
+      `;
+    }
+
+    // Journal page mode: all columns
     return `
       <tr class="journal-table__row ${shouldAnimate ? 'journal-row--animate' : ''} ${rowBgClass}" data-id="${trade.id}" style="${animationDelay}">
         <td>${formatDate(trade.timestamp)}</td>
@@ -153,9 +159,6 @@ export async function renderJournalTableRows(trades, options = {}) {
         </td>
         <td class="${rMultiple !== null ? (rMultiple >= 0 ? 'journal-table__pnl--positive' : 'journal-table__pnl--negative') : ''}">
           ${rMultiple !== null ? (Math.abs(rMultiple) < 0.05 ? '<span class="tag tag--breakeven">BE</span>' : `${rMultiple >= 0 ? '+' : ''}${rMultiple.toFixed(1)}R`) : '—'}
-        </td>
-        <td>
-          ${industry ? `<span class="position-card__badge position-card__badge--industry">${industry}</span>` : '—'}
         </td>
         <td>
           ${formattedSetupType ? `<span class="position-card__badge position-card__badge--type">${formattedSetupType}</span>` : '—'}

@@ -1059,6 +1059,13 @@ class Stats {
       });
     }
 
+    // Sort trades by date (oldest to newest) for consistent ordering
+    tradesFiltered.sort((a, b) => {
+      const dateA = new Date(a.timestamp).getTime();
+      const dateB = new Date(b.timestamp).getTime();
+      return dateA - dateB; // Ascending (oldest first)
+    });
+
     // Update date range display
     const dateRangeContainer = document.getElementById('selectedDayDateRange');
     if (dateRangeContainer) {
@@ -1090,7 +1097,8 @@ class Stats {
         // Use shared journal table renderer (single source of truth!)
         const tradesHTML = await renderJournalTableRows(tradesFiltered, {
           shouldAnimate: false,
-          expandedRows: new Set()
+          expandedRows: new Set(),
+          statsPageMode: true  // Use simplified columns for stats page
         });
 
         tradesContainer.innerHTML = `
@@ -1102,7 +1110,7 @@ class Stats {
                 <th>Options</th>
                 <th>Entry</th>
                 <th>Exit</th>
-                <th>Shares</th>
+                <th>Shares/Cons</th>
                 <th>P&L $</th>
                 <th>P&L %</th>
                 <th>Status</th>
@@ -1137,7 +1145,7 @@ class Stats {
    * @param {Object} weekRange - Optional week range { from, to } for weekly selections
    */
   openTradeInJournal(tradeId, dateStr = null, weekRange = null) {
-    // Set filters BEFORE navigation using centralized method
+    // Set filters BEFORE navigation (they'll be used by the viewChanged render)
     if (weekRange) {
       journalView.applyFiltersFromExternal({
         dateFrom: weekRange.from,
@@ -1156,17 +1164,57 @@ class Stats {
       journalView.filterPopup?.updateFilterCount(0);
     }
 
-    // Navigate to journal (filters are already set)
+    // Navigate to journal (will trigger render via viewChanged event)
     viewManager.navigateTo('journal');
 
-    // Wait for navigation and then expand the trade row
-    setTimeout(() => {
-      journalView.toggleRowExpand(tradeId);
-      const row = document.querySelector(`.journal-table__row[data-id="${tradeId}"]`);
-      if (row) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, SCROLL_DELAY_MS);
+    // Wait for journal render to complete before scrolling
+    this._waitForJournalRender().then(() => {
+      this._scrollToAndExpandTrade(tradeId);
+    });
+  }
+
+  /**
+   * Wait for journal view to finish rendering
+   * @returns {Promise} Resolves when journal render is complete
+   */
+  async _waitForJournalRender() {
+    const maxWait = 2000; // Maximum 2 seconds
+    const checkInterval = 50; // Check every 50ms
+    let waited = 0;
+
+    while (!journalView.isReadyForScroll && waited < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+      waited += checkInterval;
+    }
+
+    if (waited >= maxWait) {
+      console.warn('Timeout waiting for journal render');
+    }
+  }
+
+  /**
+   * Scroll to a trade and expand it, ensuring the entire expanded content is visible
+   * @param {number} tradeId - Trade ID to scroll to and expand
+   */
+  async _scrollToAndExpandTrade(tradeId) {
+    // Find the row
+    const row = document.querySelector(`.journal-table__row[data-id="${tradeId}"]`);
+    if (!row) {
+      return;
+    }
+
+    // Expand the row FIRST (without scrolling yet)
+    journalView.toggleRowExpand(tradeId);
+
+    // Wait for expanded content to render (chart/summary have retry logic up to 600ms)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Now do ONE smooth scroll to show the expanded content
+    const detailsRow = document.querySelector(`[data-details-id="${tradeId}"]`);
+    if (detailsRow) {
+      // Scroll the expanded content into view with smooth animation
+      detailsRow.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
   }
 }
 

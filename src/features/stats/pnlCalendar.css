@@ -240,31 +240,57 @@
   font-weight: var(--font-bold);
 }
 
-/* Selected day */
+/* Selected day - enhanced glow for all cells */
 .pnl-calendar__cell--selected {
-  border: 2px solid rgba(59, 130, 246, 0.8);
-  background: rgba(59, 130, 246, 0.15);
+  border: 3px solid rgba(59, 130, 246, 1) !important;
+  background: rgba(59, 130, 246, 0.3) !important;
   box-shadow:
-    0 0 16px rgba(59, 130, 246, 0.4),
-    inset 0 0 24px rgba(59, 130, 246, 0.15);
+    0 0 28px rgba(59, 130, 246, 0.7),
+    0 0 52px rgba(59, 130, 246, 0.4),
+    inset 0 0 36px rgba(59, 130, 246, 0.22) !important;
+  transform: scale(1.06) !important;
+  z-index: 10;
 }
 
 .pnl-calendar__cell--selected .pnl-calendar__day-number {
-  color: rgb(96, 165, 250);
+  color: rgb(96, 165, 250) !important;
   font-weight: var(--font-bold);
+  text-shadow: 0 0 10px rgba(96, 165, 250, 0.6);
+}
+
+.pnl-calendar__cell--selected .pnl-calendar__day-pnl {
+  text-shadow: 0 0 10px rgba(96, 165, 250, 0.6);
+}
+
+/* Selected weekend cells - override weekend opacity */
+.pnl-calendar__cell--weekend.pnl-calendar__cell--selected {
+  opacity: 1 !important;
+}
+
+/* Selected positive P&L cells - blend green tint with blue glow */
+.pnl-calendar__cell--positive.pnl-calendar__cell--selected {
+  background:
+    linear-gradient(rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.3)),
+    rgba(34, 197, 94, 0.15) !important;
+}
+
+/* Selected negative P&L cells - blend red tint with blue glow */
+.pnl-calendar__cell--negative.pnl-calendar__cell--selected {
+  background:
+    linear-gradient(rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.3)),
+    rgba(239, 68, 68, 0.15) !important;
 }
 
 /* Future dates */
 .pnl-calendar__cell--future {
-  opacity: 0.4;
-  cursor: not-allowed;
+  opacity: 0.5;
+  cursor: pointer;
 }
 
 .pnl-calendar__cell--future:hover {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: rgba(255, 255, 255, 0.05);
-  transform: none;
-  box-shadow: none;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Weekend */

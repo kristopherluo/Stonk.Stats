@@ -541,7 +541,6 @@
     linear-gradient(145deg, #0a0a0a 0%, #000000 100%);
   border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: var(--border-radius-lg);
-  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   box-shadow:
@@ -554,7 +553,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 400px;
+  min-height: 492px;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -848,13 +847,7 @@
   margin-bottom: var(--space-2);
 }
 
-/* Hide specific columns in stats page trades table */
-.journal-table--stats tbody tr td:nth-child(7),  /* Size % */
-.journal-table--stats tbody tr td:nth-child(10), /* R */
-.journal-table--stats tbody tr td:nth-child(11), /* Industry */
-.journal-table--stats tbody tr td:nth-child(12)  /* Type */ {
-  display: none;
-}
+/* Note: Column hiding is now handled by statsPageMode in the renderer */
 
 /* Apply P&L colors to stats page trades table (matching journal page) */
 .stats-view .journal-table td.journal-table__pnl--positive {
