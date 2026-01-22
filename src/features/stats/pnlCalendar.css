@@ -66,7 +66,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-1) var(--space-2);
-  color: #60a5fa;
+  color: rgba(255, 255, 255, 0.9);
   background:
     radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.25) 0%, transparent 70%),
     linear-gradient(145deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
@@ -85,7 +85,7 @@
     radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.35) 0%, transparent 70%),
     linear-gradient(145deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.12) 100%);
   border-color: rgba(96, 165, 250, 0.9);
-  color: #60a5fa;
+  color: white;
   text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
   box-shadow:
     0 0 20px rgba(59, 130, 246, 0.5),
@@ -108,7 +108,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: var(--font-semibold);
-  color: #60a5fa;
+  color: rgba(255, 255, 255, 0.9);
   background:
     radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.25) 0%, transparent 70%),
     linear-gradient(145deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
@@ -128,7 +128,7 @@
     radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.35) 0%, transparent 70%),
     linear-gradient(145deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.12) 100%);
   border-color: rgba(96, 165, 250, 0.9);
-  color: #60a5fa;
+  color: white;
   text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
   box-shadow:
     0 0 20px rgba(59, 130, 246, 0.5),
@@ -240,26 +240,59 @@
   font-weight: var(--font-bold);
 }
 
-/* Selected day - enhanced glow for all cells */
+/* Selected day - Full Neon Sign / Cyberpunk Effect */
 .pnl-calendar__cell--selected {
-  border: 3px solid rgba(59, 130, 246, 1) !important;
-  background: rgba(59, 130, 246, 0.3) !important;
+  border: 2px solid rgba(96, 165, 250, 0.8) !important;
+  background:
+    linear-gradient(135deg, rgba(30, 58, 138, 0.5) 0%, rgba(29, 78, 216, 0.4) 100%),
+    radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.15) 0%, transparent 70%) !important;
   box-shadow:
-    0 0 28px rgba(59, 130, 246, 0.7),
-    0 0 52px rgba(59, 130, 246, 0.4),
-    inset 0 0 36px rgba(59, 130, 246, 0.22) !important;
+    0 0 30px rgba(96, 165, 250, 0.5),
+    0 0 60px rgba(96, 165, 250, 0.3),
+    inset 0 0 25px rgba(96, 165, 250, 0.15),
+    inset 0 1px 0 rgba(186, 230, 253, 0.2),
+    0 4px 20px rgba(0, 0, 0, 0.3) !important;
   transform: scale(1.06) !important;
   z-index: 10;
+  animation: calendarNeonPulse 2s ease-in-out infinite;
 }
 
 .pnl-calendar__cell--selected .pnl-calendar__day-number {
-  color: rgb(96, 165, 250) !important;
+  color: rgb(224, 242, 254) !important;
   font-weight: var(--font-bold);
-  text-shadow: 0 0 10px rgba(96, 165, 250, 0.6);
+  text-shadow:
+    0 0 10px rgba(96, 165, 250, 1),
+    0 0 20px rgba(96, 165, 250, 0.8),
+    0 0 30px rgba(96, 165, 250, 0.6),
+    0 0 40px rgba(96, 165, 250, 0.4);
 }
 
 .pnl-calendar__cell--selected .pnl-calendar__day-pnl {
-  text-shadow: 0 0 10px rgba(96, 165, 250, 0.6);
+  text-shadow:
+    0 0 10px rgba(96, 165, 250, 1),
+    0 0 20px rgba(96, 165, 250, 0.8),
+    0 0 30px rgba(96, 165, 250, 0.6),
+    0 0 40px rgba(96, 165, 250, 0.4);
+}
+
+/* Neon pulse animation for selected calendar day */
+@keyframes calendarNeonPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 30px rgba(96, 165, 250, 0.5),
+      0 0 60px rgba(96, 165, 250, 0.3),
+      inset 0 0 25px rgba(96, 165, 250, 0.15),
+      inset 0 1px 0 rgba(186, 230, 253, 0.2),
+      0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(96, 165, 250, 0.7),
+      0 0 80px rgba(96, 165, 250, 0.4),
+      inset 0 0 30px rgba(96, 165, 250, 0.2),
+      inset 0 1px 0 rgba(186, 230, 253, 0.3),
+      0 4px 20px rgba(0, 0, 0, 0.3);
+  }
 }
 
 /* Selected weekend cells - override weekend opacity */

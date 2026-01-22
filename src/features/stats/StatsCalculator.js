@@ -101,32 +101,61 @@ export class StatsCalculator {
   }
 
   /**
-   * Calculate Sharpe ratio from closed trades
-   * Returns null if less than 2 trades or stdDev is 0
+   * Calculate Average Win/Loss Ratio (also called Reward/Risk Ratio)
+   * Returns the ratio of average winning trade to average losing trade
+   * A ratio of 2.0 means average win is 2x the average loss
+   * Returns null if no wins or no losses
    */
-  calculateSharpeRatio(trades) {
+  calculateAvgWinLossRatio(trades) {
     const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
 
-    if (closedTrades.length < 2) return null;
+    if (closedTrades.length === 0) return null;
 
-    // Get returns as percentages
-    const returns = closedTrades.map(t => {
-      const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
-      const positionSize = t.positionSize || 1;
-      return (pnl / positionSize) * 100;
-    });
+    const wins = closedTrades.filter(t => getTradeRealizedPnL(t) > 0);
+    const losses = closedTrades.filter(t => getTradeRealizedPnL(t) < 0);
 
-    // Mean return
-    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    if (wins.length === 0 || losses.length === 0) return null;
 
-    // Standard deviation
-    const squaredDiffs = returns.map(r => Math.pow(r - mean, 2));
-    const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / returns.length;
-    const stdDev = Math.sqrt(variance);
+    const totalWins = wins.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
+    const totalLosses = losses.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
 
-    // Sharpe ratio (simplified, no risk-free rate)
-    if (stdDev === 0) return null;
-    return mean / stdDev;
+    const avgWin = totalWins / wins.length;
+    const avgLoss = Math.abs(totalLosses / losses.length);
+
+    if (avgLoss === 0) return null;
+    return avgWin / avgLoss;
+  }
+
+  /**
+   * Calculate Trade Expectancy (expected profit/loss per trade)
+   * Formula: (Win Rate × Avg Win) - (Loss Rate × Avg Loss)
+   * Returns the expected dollar amount each trade should make/lose
+   * Returns null if no closed trades
+   */
+  calculateTradeExpectancy(trades) {
+    const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
+
+    if (closedTrades.length === 0) return null;
+
+    const wins = closedTrades.filter(t => getTradeRealizedPnL(t) > 0);
+    const losses = closedTrades.filter(t => getTradeRealizedPnL(t) < 0);
+    const breakeven = closedTrades.filter(t => getTradeRealizedPnL(t) === 0);
+
+    const totalTrades = closedTrades.length;
+    const winRate = wins.length / totalTrades;
+    const lossRate = losses.length / totalTrades;
+
+    const totalWins = wins.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
+    const totalLosses = losses.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
+
+    const avgWin = wins.length > 0 ? totalWins / wins.length : 0;
+    const avgLoss = losses.length > 0 ? totalLosses / losses.length : 0;
+
+    // Expectancy = (Win% × Avg Win) + (Loss% × Avg Loss)
+    // Note: avgLoss is already negative, so we add it
+    const expectancy = (winRate * avgWin) + (lossRate * avgLoss);
+
+    return expectancy;
   }
 
   /**

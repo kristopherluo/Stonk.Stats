@@ -66,6 +66,7 @@ class Stats {
       winRate: document.getElementById('statWinRate'),
       winLoss: document.getElementById('statWinLoss'),
       sharpe: document.getElementById('statSharpe'),
+      expectancy: document.getElementById('statExpectancy'),
 
       // Account Growth
       currentAccount: document.getElementById('statCurrentAccount'),
@@ -440,7 +441,8 @@ class Stats {
     const realizedPnL = this.calculator.calculateRealizedPnL(filteredTrades);
     const winsLosses = this.calculator.calculateWinsLosses(filteredTrades);
     const winRate = this.calculator.calculateWinRate(filteredTrades);
-    const sharpe = this.calculator.calculateSharpeRatio(filteredTrades);
+    const avgWinLossRatio = this.calculator.calculateAvgWinLossRatio(filteredTrades);
+    const tradeExpectancy = this.calculator.calculateTradeExpectancy(filteredTrades);
     const netCashFlow = this.calculator.calculateNetCashFlow(filterState.dateFrom, filterState.dateTo);
 
     // Calculate deposits and withdrawals separately for breakdown display
@@ -491,7 +493,8 @@ class Stats {
       losses: winsLosses.losses,
       totalTrades: winsLosses.total,
       winRate,
-      sharpe,
+      avgWinLossRatio,
+      tradeExpectancy,
       totalPnL: pnlResult.pnl,
       accountAtRangeStart: pnlResult.startingBalance,
       accountAtRangeStartDate: pnlResult.startDateStr,
@@ -538,9 +541,23 @@ class Stats {
       this.elements.winLoss.innerHTML = `<span class="stat-card__sub--success-glow">${s.wins} win${s.wins !== 1 ? 's' : ''}</span> · <span class="stat-card__sub--danger">${s.losses} loss${s.losses !== 1 ? 'es' : ''}</span>`;
     }
 
-    // Sharpe Ratio
+    // Average Win/Loss Ratio
     if (this.elements.sharpe) {
-      this.elements.sharpe.textContent = s.sharpe !== null ? s.sharpe.toFixed(2) : '-';
+      this.elements.sharpe.textContent = s.avgWinLossRatio !== null ? s.avgWinLossRatio.toFixed(2) : '-';
+    }
+
+    // Trade Expectancy
+    if (this.elements.expectancy) {
+      if (s.tradeExpectancy !== null) {
+        const isPositive = s.tradeExpectancy >= 0;
+        this.elements.expectancy.textContent = isPositive
+          ? `+$${this.formatNumber(Math.abs(s.tradeExpectancy))}`
+          : `-$${this.formatNumber(Math.abs(s.tradeExpectancy))}`;
+        document.getElementById('statExpectancyCard')?.classList.toggle('stat-card--success', isPositive && s.tradeExpectancy !== 0);
+        document.getElementById('statExpectancyCard')?.classList.toggle('stat-card--danger', !isPositive);
+      } else {
+        this.elements.expectancy.textContent = '$0.00';
+      }
     }
 
     // P&L (Total with unrealized)
