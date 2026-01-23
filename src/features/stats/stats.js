@@ -287,6 +287,12 @@ class Stats {
         // Update current mode
         this.currentTradesMode = mode;
 
+        // Reset scroll position to top
+        const tradesContainer = document.getElementById('selectedDayTrades');
+        if (tradesContainer) {
+          tradesContainer.scrollTop = 0;
+        }
+
         // Re-render trades with the new mode
         if (this.selectedDate || this.selectedWeekRange) {
           this.handleCalendarDayClick(this.selectedDate, this.selectedWeekRange);
@@ -1016,11 +1022,11 @@ class Stats {
       });
     }
 
-    // Sort trades by date (newest to oldest)
+    // Sort trades by date (oldest to newest)
     tradesOpened.sort((a, b) => {
       const dateA = new Date(a.timestamp).getTime();
       const dateB = new Date(b.timestamp).getTime();
-      return dateB - dateA; // Descending (newest first)
+      return dateA - dateB; // Ascending (oldest first)
     });
 
     // Filter trades CLOSED on this date/week
@@ -1120,10 +1126,16 @@ class Stats {
       tradesContainer.querySelectorAll('tbody tr').forEach(row => {
         row.addEventListener('click', (e) => {
           const tradeId = parseInt(row.dataset.id);
-          if (weekRange) {
-            this.openTradeInJournal(tradeId, null, weekRange);
+          // Only apply date filter for opened trades, not closed trades
+          if (type === 'opened') {
+            if (weekRange) {
+              this.openTradeInJournal(tradeId, null, weekRange);
+            } else {
+              this.openTradeInJournal(tradeId, dateStr);
+            }
           } else {
-            this.openTradeInJournal(tradeId, dateStr);
+            // For closed trades, open journal without date filter
+            this.openTradeInJournal(tradeId);
           }
         });
       });

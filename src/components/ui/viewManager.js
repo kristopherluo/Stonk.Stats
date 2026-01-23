@@ -217,6 +217,22 @@ class ViewManager {
         toView.classList.add('view--entering');
         toView.classList.add('view--active');
 
+        // Reset scroll position to top
+        toView.scrollTop = 0;
+
+        // Also reset specific scroll containers
+        if (view === 'stats') {
+          const statsJournalContainer = document.getElementById('selectedDayTrades');
+          if (statsJournalContainer) {
+            statsJournalContainer.scrollTop = 0;
+          }
+        } else if (view === 'journal') {
+          const journalTableContainer = toView.querySelector('.journal-table-container');
+          if (journalTableContainer) {
+            journalTableContainer.scrollTop = 0;
+          }
+        }
+
         setTimeout(() => {
           toView.classList.remove('view--entering');
         }, 300);
@@ -227,6 +243,22 @@ class ViewManager {
       fromView.classList.add('view--hidden');
       toView.classList.remove('view--hidden');
       toView.classList.add('view--active');
+
+      // Reset scroll position to top
+      toView.scrollTop = 0;
+
+      // Also reset specific scroll containers
+      if (view === 'stats') {
+        const statsJournalContainer = document.getElementById('selectedDayTrades');
+        if (statsJournalContainer) {
+          statsJournalContainer.scrollTop = 0;
+        }
+      } else if (view === 'journal') {
+        const journalTableContainer = toView.querySelector('.journal-table-container');
+        if (journalTableContainer) {
+          journalTableContainer.scrollTop = 0;
+        }
+      }
     }
 
     this.currentView = view;
